@@ -117,40 +117,36 @@ function solve3(A: number[], b: number[], out: number[]): boolean {
  * quadric is nearly singular and the "optimal" point can fly off to
  * infinity, causing the exploded mesh artifact.
  */
-const MAX_STRETCH = 1.1;  // optimal point must stay within 1.5× edge length
-
 function optimalVertex(
   Qc: Float64Array,
   vix: number, viy: number, viz: number,
   vjx: number, vjy: number, vjz: number,
 ): Vec3 {
-  // 1. Always start with safe candidates
-  const candidates: Vec3[] = [
-    [vix, viy, viz],
-    [(vix + vjx) * 0.5, (viy + vjy) * 0.5, (viz + vjz) * 0.5],
-    [vjx, vjy, vjz],
-  ];
+  const midpoint: Vec3 = [(vix + vjx) * 0.5, (viy + vjy) * 0.5, (viz + vjz) * 0.5];
+  const candidates: Vec3[] = [[vix, viy, viz], [vjx, vjy, vjz], midpoint];
 
-  // 2. Analytical check
   const A = [Qc[0], Qc[1], Qc[2], Qc[4], Qc[5], Qc[6], Qc[8], Qc[9], Qc[10]];
   const b = [-Qc[3], -Qc[7], -Qc[11]];
   const sol = [0.0, 0.0, 0.0];
 
-  const isSolved = solve3(A,b,sol);
-  const edgeLen2 = (vjx - vix) ** 2 + (vjy - viy) ** 2 + (vjz - viz) ** 2;
-  const dx = sol[0] - vix, dy = sol[1] - viy, dz = sol[2] - viz;
-  const dist2 = dx * dx + dy * dy + dz * dz;
-  
-  if (!isSolved || dist2 > edgeLen2 * MAX_STRETCH) 
-    return [(vix + vjx) * 0.5, (viy + vjy) * 0.5, (viz + vjz) * 0.5];
-  else if (isSolved) {
-    // Only add the "optimal" point if it's extremely close
-    if (dist2 < edgeLen2 * MAX_STRETCH) {
+  if (solve3(A, b, sol)) {
+    // 1. Calculate Bounding Box of the edge
+    const minX = Math.min(vix, vjx), maxX = Math.max(vix, vjx);
+    const minY = Math.min(viy, vjy), maxY = Math.max(viy, vjy);
+    const minZ = Math.min(viz, vjz), maxZ = Math.max(viz, vjz);
+
+    // 2. Add a small "padding" to the box (e.g., 20% of edge length)
+    const edgeLen = Math.sqrt((vjx - vix) ** 2 + (vjy - viy) ** 2 + (vjz - viz) ** 2);
+    const pad = edgeLen * 0.2;
+
+    // 3. ONLY accept optimal point if it's inside this padded box
+    if (sol[0] >= minX - pad && sol[0] <= maxX + pad &&
+        sol[1] >= minY - pad && sol[1] <= maxY + pad &&
+        sol[2] >= minZ - pad && sol[2] <= maxZ + pad) {
       candidates.push(sol as Vec3);
     }
   }
 
-  // 3. Pick the lowest cost among SAFELY constrained points
   let best = candidates[0];
   let bestCost = Infinity;
   for (const c of candidates) {
@@ -242,27 +238,28 @@ export function qemSimplify(
     vertFaces[faces[fi*3+2]].add(fi);
   }
 
-  // Replace string keys with a numeric hash (works for up to ~2 million verts)
+  // Replace your edgeKey with this (Max 2M vertices)
   const edgeKey = (u: number, v: number) => {
-    return u < v ? (u * 4000000 + v) : (v * 4000000 + u);
+    return u < v ? (u * 2000003 + v) : (v * 2000003 + u);
   };
 
-  // Change edgeSeen to a Set of numbers
   const edgeSeen = new Set<number>();
-
   const heap = new MinHeap<[number, number, Vec3]>();
 
   function pushEdge(vi: number, vj: number) {
+    // Always ensure we are using current ROOTS
+    vi = find(vi); 
+    vj = find(vj);
+    if (vi === vj) return;
+
     const key = edgeKey(vi, vj);
     if (edgeSeen.has(key)) return;
     edgeSeen.add(key);
+
     const Qc = new Float64Array(16);
-    for (let k = 0; k < 16; k++) Qc[k] = Q[vi*16+k] + Q[vj*16+k];
-    const opt = optimalVertex(
-      Qc,
-      pos[vi*3], pos[vi*3+1], pos[vi*3+2],
-      pos[vj*3], pos[vj*3+1], pos[vj*3+2],
-    );
+    for (let k = 0; k < 16; k++) Qc[k] = Q[vi * 16 + k] + Q[vj * 16 + k];
+    
+    const opt = optimalVertex(Qc, pos[vi*3], pos[vi*3+1], pos[vi*3+2], pos[vj*3], pos[vj*3+1], pos[vj*3+2]);
     heap.push(evalCost(Qc, opt[0], opt[1], opt[2]), [vi, vj, opt]);
   }
 
@@ -276,17 +273,28 @@ export function qemSimplify(
 
   while (nFaces > targetFaces && heap.size > 0) {
     const item = heap.pop()!;
-    let [vi, vj, vopt] = item.val;
+    const [vi_orig, vj_orig, vopt] = item.val;
 
-    vi = find(vi); vj = find(vj);
+    let vi = find(vi_orig); 
+    let vj = find(vj_orig);
+    
+    // 1. STALE CHECK: Discard if roots have already merged
     if (vi === vj) continue;
+    if (vi !== vi_orig || vj !== vj_orig) continue; 
 
+    // 2. UNION & POSITION UPDATE
     union(vi, vj, vopt[0], vopt[1], vopt[2]);
 
+    // 3. RECOMPUTE QUADRIC FROM LIVE FACES (Stops the "Spikes")
+    // We clear it, then sum only active triangles to avoid double-counting.
+    for (let k = 0; k < 16; k++) Q[vi * 16 + k] = 0;
     const newNeighbors = new Set<number>();
 
+    // Combine vj's faces into vi
     for (const fi of vertFaces[vj]) {
       if (!faceAlive[fi]) continue;
+      
+      // Update all corners to current roots
       const c0 = find(faces[fi*3]);
       const c1 = find(faces[fi*3+1]);
       const c2 = find(faces[fi*3+2]);
@@ -296,29 +304,52 @@ export function qemSimplify(
         faceAlive[fi] = 0;
         nFaces--;
         removed++;
-        for (const c of [c0, c1, c2]) if (c !== vj) vertFaces[c].delete(fi);
+        // Scrub face from neighbors
+        for (const c of [c0, c1, c2]) vertFaces[c].delete(fi);
       } else {
         vertFaces[vi].add(fi);
-        for (const c of [c0, c1, c2]) if (c !== vi) newNeighbors.add(c);
+        newNeighbors.add(c0); newNeighbors.add(c1); newNeighbors.add(c2);
       }
     }
     vertFaces[vj].clear();
 
+    // 4. SECOND PASS: Finalize vi's quadrics and neighbors
     for (const fi of vertFaces[vi]) {
       if (!faceAlive[fi]) continue;
-      for (let k = 0; k < 3; k++) {
-        const r = find(faces[fi*3+k]);
-        faces[fi*3+k] = r;
-        if (r !== vi) newNeighbors.add(r);
+      
+      // Re-sum the quadric for THIS specific live face
+      // (This logic mirrors your computeQuadrics function)
+      const i0 = faces[fi*3], i1 = faces[fi*3+1], i2 = faces[fi*3+2];
+      const ax = pos[i0*3], ay = pos[i0*3+1], az = pos[i0*3+2];
+      const bx = pos[i1*3], by = pos[i1*3+1], bz = pos[i1*3+2];
+      const cx = pos[i2*3], cy = pos[i2*3+1], cz = pos[i2*3+2];
+      let nx = (by-ay)*(cz-az) - (bz-az)*(cy-ay);
+      let ny = (bz-az)*(cx-ax) - (bx-ax)*(cz-az);
+      let nz = (bx-ax)*(cy-ay) - (by-ay)*(cx-ax);
+      const len = Math.sqrt(nx*nx + ny*ny + nz*nz);
+      if (len > 1e-12) {
+        nx /= len; ny /= len; nz /= len;
+        const d = -(nx*ax + ny*ay + nz*az);
+        const p = [nx, ny, nz, d];
+        for (let r = 0; r < 4; r++)
+          for (let c = 0; c < 4; c++)
+            Q[vi * 16 + r*4 + c] += p[r] * p[c];
+      }
+      newNeighbors.add(i0); newNeighbors.add(i1); newNeighbors.add(i2);
+    }
+
+    // 5. RE-PUSH EDGES (Ensures app doesn't hang)
+    newNeighbors.delete(vi);
+    for (const nb of newNeighbors) {
+      const targetNb = find(nb);
+      if (targetNb !== vi) {
+        // Clear the key so pushEdge can update the cost in the heap
+        edgeSeen.delete(edgeKey(vi, targetNb)); 
+        pushEdge(vi, targetNb);
       }
     }
 
-    for (const nb of newNeighbors) {
-      edgeSeen.delete(edgeKey(vi, nb));
-      pushEdge(vi, nb);
-    }
-
-    if (onProgress && removed % 200 === 0)
+    if (onProgress && removed % 500 === 0)
       onProgress(Math.min(removed / totalToRemove, 1));
   }
 
@@ -443,7 +474,7 @@ function buildMorphMesh(simpVerts: Float32Array, simpFaces: Uint32Array, origNeu
 
   geo.computeVertexNormals();
 
-  const mesh = new THREE.Mesh(geo, new THREE.MeshStandardMaterial({ color: 0xdddddd, flatShading: false }));
+  const mesh = new THREE.Mesh(geo, new THREE.MeshStandardMaterial({ color: 0xdddddd, flatShading: true }));
   mesh.morphTargetInfluences = [0];
   return mesh;
 }

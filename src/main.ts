@@ -9,7 +9,12 @@ import * as BufferGeometryUtils from "three/examples/jsm/utils/BufferGeometryUti
 // ─────────────────────────────────────────────────────────────────────────────
 
 const scene = new THREE.Scene();
-const camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 1000);
+const camera = new THREE.PerspectiveCamera(
+  75,
+  window.innerWidth / window.innerHeight,
+  0.1,
+  3000,
+);
 const canvas = document.querySelector<HTMLCanvasElement>("#bg");
 if (!canvas) throw new Error('Canvas element "#bg" not found');
 
@@ -39,27 +44,40 @@ interface SimplifyResult {
 // QEM helpers
 // ─────────────────────────────────────────────────────────────────────────────
 
-function computeQuadrics(verts: Float64Array, faces: Int32Array, nVerts: number): Float64Array {
+function computeQuadrics(
+  verts: Float64Array,
+  faces: Int32Array,
+  nVerts: number,
+): Float64Array {
   const Q = new Float64Array(nVerts * 16);
   const nFaces = faces.length / 3;
   for (let fi = 0; fi < nFaces; fi++) {
-    const i0 = faces[fi*3], i1 = faces[fi*3+1], i2 = faces[fi*3+2];
-    const ax = verts[i0*3], ay = verts[i0*3+1], az = verts[i0*3+2];
-    const bx = verts[i1*3], by = verts[i1*3+1], bz = verts[i1*3+2];
-    const cx = verts[i2*3], cy = verts[i2*3+1], cz = verts[i2*3+2];
-    let nx = (by-ay)*(cz-az) - (bz-az)*(cy-ay);
-    let ny = (bz-az)*(cx-ax) - (bx-ax)*(cz-az);
-    let nz = (bx-ax)*(cy-ay) - (by-ay)*(cx-ax);
-    const len = Math.sqrt(nx*nx + ny*ny + nz*nz);
+    const i0 = faces[fi * 3],
+      i1 = faces[fi * 3 + 1],
+      i2 = faces[fi * 3 + 2];
+    const ax = verts[i0 * 3],
+      ay = verts[i0 * 3 + 1],
+      az = verts[i0 * 3 + 2];
+    const bx = verts[i1 * 3],
+      by = verts[i1 * 3 + 1],
+      bz = verts[i1 * 3 + 2];
+    const cx = verts[i2 * 3],
+      cy = verts[i2 * 3 + 1],
+      cz = verts[i2 * 3 + 2];
+    let nx = (by - ay) * (cz - az) - (bz - az) * (cy - ay);
+    let ny = (bz - az) * (cx - ax) - (bx - ax) * (cz - az);
+    let nz = (bx - ax) * (cy - ay) - (by - ay) * (cx - ax);
+    const len = Math.sqrt(nx * nx + ny * ny + nz * nz);
     if (len < 1e-12) continue;
-    nx /= len; ny /= len; nz /= len;
-    const d = -(nx*ax + ny*ay + nz*az);
+    nx /= len;
+    ny /= len;
+    nz /= len;
+    const d = -(nx * ax + ny * ay + nz * az);
     const p = [nx, ny, nz, d];
     for (const vi of [i0, i1, i2]) {
       const base = vi * 16;
       for (let r = 0; r < 4; r++)
-        for (let c = 0; c < 4; c++)
-          Q[base + r*4 + c] += p[r] * p[c];
+        for (let c = 0; c < 4; c++) Q[base + r * 4 + c] += p[r] * p[c];
     }
   }
   return Q;
@@ -70,7 +88,7 @@ function evalCost(Qc: Float64Array, x: number, y: number, z: number): number {
   let cost = 0;
   for (let r = 0; r < 4; r++) {
     let row = 0;
-    for (let c = 0; c < 4; c++) row += Qc[r*4+c] * v[c];
+    for (let c = 0; c < 4; c++) row += Qc[r * 4 + c] * v[c];
     cost += row * v[r];
   }
   return cost;
@@ -83,21 +101,25 @@ function solve3(A: number[], b: number[], out: number[]): boolean {
     [A[6], A[7], A[8], b[2]],
   ];
   for (let col = 0; col < 3; col++) {
-    let maxVal = Math.abs(M[col][col]), maxRow = col;
-    for (let row = col+1; row < 3; row++) {
-      if (Math.abs(M[row][col]) > maxVal) { maxVal = Math.abs(M[row][col]); maxRow = row; }
+    let maxVal = Math.abs(M[col][col]),
+      maxRow = col;
+    for (let row = col + 1; row < 3; row++) {
+      if (Math.abs(M[row][col]) > maxVal) {
+        maxVal = Math.abs(M[row][col]);
+        maxRow = row;
+      }
     }
     if (maxVal < 1e-10) return false;
     [M[col], M[maxRow]] = [M[maxRow], M[col]];
     const inv = 1 / M[col][col];
-    for (let row = col+1; row < 3; row++) {
+    for (let row = col + 1; row < 3; row++) {
       const f = M[row][col] * inv;
       for (let k = col; k <= 3; k++) M[row][k] -= f * M[col][k];
     }
   }
   for (let row = 2; row >= 0; row--) {
     let s = M[row][3];
-    for (let k = row+1; k < 3; k++) s -= M[row][k] * out[k];
+    for (let k = row + 1; k < 3; k++) s -= M[row][k] * out[k];
     out[row] = s / M[row][row];
   }
   return true;
@@ -119,10 +141,18 @@ function solve3(A: number[], b: number[], out: number[]): boolean {
  */
 function optimalVertex(
   Qc: Float64Array,
-  vix: number, viy: number, viz: number,
-  vjx: number, vjy: number, vjz: number,
+  vix: number,
+  viy: number,
+  viz: number,
+  vjx: number,
+  vjy: number,
+  vjz: number,
 ): Vec3 {
-  const midpoint: Vec3 = [(vix + vjx) * 0.5, (viy + vjy) * 0.5, (viz + vjz) * 0.5];
+  const midpoint: Vec3 = [
+    (vix + vjx) * 0.5,
+    (viy + vjy) * 0.5,
+    (viz + vjz) * 0.5,
+  ];
   const candidates: Vec3[] = [[vix, viy, viz], [vjx, vjy, vjz], midpoint];
 
   const A = [Qc[0], Qc[1], Qc[2], Qc[4], Qc[5], Qc[6], Qc[8], Qc[9], Qc[10]];
@@ -131,18 +161,28 @@ function optimalVertex(
 
   if (solve3(A, b, sol)) {
     // 1. Calculate Bounding Box of the edge
-    const minX = Math.min(vix, vjx), maxX = Math.max(vix, vjx);
-    const minY = Math.min(viy, vjy), maxY = Math.max(viy, vjy);
-    const minZ = Math.min(viz, vjz), maxZ = Math.max(viz, vjz);
+    const minX = Math.min(vix, vjx),
+      maxX = Math.max(vix, vjx);
+    const minY = Math.min(viy, vjy),
+      maxY = Math.max(viy, vjy);
+    const minZ = Math.min(viz, vjz),
+      maxZ = Math.max(viz, vjz);
 
     // 2. Add a small "padding" to the box (e.g., 20% of edge length)
-    const edgeLen = Math.sqrt((vjx - vix) ** 2 + (vjy - viy) ** 2 + (vjz - viz) ** 2);
+    const edgeLen = Math.sqrt(
+      (vjx - vix) ** 2 + (vjy - viy) ** 2 + (vjz - viz) ** 2,
+    );
     const pad = edgeLen * 0.2;
 
     // 3. ONLY accept optimal point if it's inside this padded box
-    if (sol[0] >= minX - pad && sol[0] <= maxX + pad &&
-        sol[1] >= minY - pad && sol[1] <= maxY + pad &&
-        sol[2] >= minZ - pad && sol[2] <= maxZ + pad) {
+    if (
+      sol[0] >= minX - pad &&
+      sol[0] <= maxX + pad &&
+      sol[1] >= minY - pad &&
+      sol[1] <= maxY + pad &&
+      sol[2] >= minZ - pad &&
+      sol[2] <= maxZ + pad
+    ) {
       candidates.push(sol as Vec3);
     }
   }
@@ -165,30 +205,42 @@ function optimalVertex(
 
 class MinHeap<T> {
   private data: { key: number; val: T }[] = [];
-  push(key: number, val: T) { this.data.push({ key, val }); this._up(this.data.length - 1); }
+  push(key: number, val: T) {
+    this.data.push({ key, val });
+    this._up(this.data.length - 1);
+  }
   pop() {
     if (!this.data.length) return undefined;
     const top = this.data[0];
     const last = this.data.pop()!;
-    if (this.data.length) { this.data[0] = last; this._down(0); }
+    if (this.data.length) {
+      this.data[0] = last;
+      this._down(0);
+    }
     return top;
   }
-  get size() { return this.data.length; }
+  get size() {
+    return this.data.length;
+  }
   private _up(i: number) {
     while (i > 0) {
-      const p = (i-1)>>1;
+      const p = (i - 1) >> 1;
       if (this.data[p].key <= this.data[i].key) break;
-      [this.data[p], this.data[i]] = [this.data[i], this.data[p]]; i = p;
+      [this.data[p], this.data[i]] = [this.data[i], this.data[p]];
+      i = p;
     }
   }
   private _down(i: number) {
     const n = this.data.length;
     while (true) {
-      let s = i; const l = 2*i+1, r = 2*i+2;
+      let s = i;
+      const l = 2 * i + 1,
+        r = 2 * i + 2;
       if (l < n && this.data[l].key < this.data[s].key) s = l;
       if (r < n && this.data[r].key < this.data[s].key) s = r;
       if (s === i) break;
-      [this.data[s], this.data[i]] = [this.data[i], this.data[s]]; i = s;
+      [this.data[s], this.data[i]] = [this.data[i], this.data[s]];
+      i = s;
     }
   }
 }
@@ -203,44 +255,58 @@ export function qemSimplify(
   ratio: number,
   onProgress?: (f: number) => void,
 ): SimplifyResult {
-  
   const nVertsOrig = vertsIn.length / 3;
   const nFacesOrig = facesIn.length / 3;
   const targetFaces = Math.max(1, Math.floor(nFacesOrig * ratio));
 
   const pos = new Float64Array(vertsIn);
-  const Q   = computeQuadrics(pos, facesIn, nVertsOrig);
+  const Q = computeQuadrics(pos, facesIn, nVertsOrig);
 
   // Union-Find with full path compression
   const parent = Int32Array.from({ length: nVertsOrig }, (_, i) => i);
   function find(x: number): number {
     let root = x;
     while (parent[root] !== root) root = parent[root];
-    while (parent[x] !== root) { const nx = parent[x]; parent[x] = root; x = nx; }
+    while (parent[x] !== root) {
+      const nx = parent[x];
+      parent[x] = root;
+      x = nx;
+    }
     return root;
   }
-  function union(keep: number, remove: number, nx: number, ny: number, nz: number) {
+  function union(
+    keep: number,
+    remove: number,
+    nx: number,
+    ny: number,
+    nz: number,
+  ) {
     parent[remove] = keep;
-    pos[keep*3] = nx; pos[keep*3+1] = ny; pos[keep*3+2] = nz;
-    for (let k = 0; k < 16; k++) Q[keep*16+k] += Q[remove*16+k];
+    pos[keep * 3] = nx;
+    pos[keep * 3 + 1] = ny;
+    pos[keep * 3 + 2] = nz;
+    for (let k = 0; k < 16; k++) Q[keep * 16 + k] += Q[remove * 16 + k];
   }
 
   // Face storage — corners kept as current roots
-  const faces     = new Int32Array(facesIn);
+  const faces = new Int32Array(facesIn);
   const faceAlive = new Uint8Array(nFacesOrig).fill(1);
   let nFaces = nFacesOrig;
 
   // Vertex → face adjacency
-  const vertFaces: Set<number>[] = Array.from({ length: nVertsOrig }, () => new Set());
+  const vertFaces: Set<number>[] = Array.from(
+    { length: nVertsOrig },
+    () => new Set(),
+  );
   for (let fi = 0; fi < nFacesOrig; fi++) {
-    vertFaces[faces[fi*3]].add(fi);
-    vertFaces[faces[fi*3+1]].add(fi);
-    vertFaces[faces[fi*3+2]].add(fi);
+    vertFaces[faces[fi * 3]].add(fi);
+    vertFaces[faces[fi * 3 + 1]].add(fi);
+    vertFaces[faces[fi * 3 + 2]].add(fi);
   }
 
   // Replace your edgeKey with this (Max 2M vertices)
   const edgeKey = (u: number, v: number) => {
-    return u < v ? (u * 2000003 + v) : (v * 2000003 + u);
+    return u < v ? u * 2000003 + v : v * 2000003 + u;
   };
 
   const edgeSeen = new Set<number>();
@@ -248,7 +314,7 @@ export function qemSimplify(
 
   function pushEdge(vi: number, vj: number) {
     // Always ensure we are using current ROOTS
-    vi = find(vi); 
+    vi = find(vi);
     vj = find(vj);
     if (vi === vj) return;
 
@@ -258,14 +324,26 @@ export function qemSimplify(
 
     const Qc = new Float64Array(16);
     for (let k = 0; k < 16; k++) Qc[k] = Q[vi * 16 + k] + Q[vj * 16 + k];
-    
-    const opt = optimalVertex(Qc, pos[vi*3], pos[vi*3+1], pos[vi*3+2], pos[vj*3], pos[vj*3+1], pos[vj*3+2]);
+
+    const opt = optimalVertex(
+      Qc,
+      pos[vi * 3],
+      pos[vi * 3 + 1],
+      pos[vi * 3 + 2],
+      pos[vj * 3],
+      pos[vj * 3 + 1],
+      pos[vj * 3 + 2],
+    );
     heap.push(evalCost(Qc, opt[0], opt[1], opt[2]), [vi, vj, opt]);
   }
 
   for (let fi = 0; fi < nFacesOrig; fi++) {
-    const a = faces[fi*3], b = faces[fi*3+1], c = faces[fi*3+2];
-    pushEdge(a, b); pushEdge(b, c); pushEdge(a, c);
+    const a = faces[fi * 3],
+      b = faces[fi * 3 + 1],
+      c = faces[fi * 3 + 2];
+    pushEdge(a, b);
+    pushEdge(b, c);
+    pushEdge(a, c);
   }
 
   const totalToRemove = nFacesOrig - targetFaces;
@@ -275,12 +353,12 @@ export function qemSimplify(
     const item = heap.pop()!;
     const [vi_orig, vj_orig, vopt] = item.val;
 
-    let vi = find(vi_orig); 
+    let vi = find(vi_orig);
     let vj = find(vj_orig);
-    
+
     // 1. STALE CHECK: Discard if roots have already merged
     if (vi === vj) continue;
-    if (vi !== vi_orig || vj !== vj_orig) continue; 
+    if (vi !== vi_orig || vj !== vj_orig) continue;
 
     // 2. UNION & POSITION UPDATE
     union(vi, vj, vopt[0], vopt[1], vopt[2]);
@@ -293,12 +371,14 @@ export function qemSimplify(
     // Combine vj's faces into vi
     for (const fi of vertFaces[vj]) {
       if (!faceAlive[fi]) continue;
-      
+
       // Update all corners to current roots
-      const c0 = find(faces[fi*3]);
-      const c1 = find(faces[fi*3+1]);
-      const c2 = find(faces[fi*3+2]);
-      faces[fi*3] = c0; faces[fi*3+1] = c1; faces[fi*3+2] = c2;
+      const c0 = find(faces[fi * 3]);
+      const c1 = find(faces[fi * 3 + 1]);
+      const c2 = find(faces[fi * 3 + 2]);
+      faces[fi * 3] = c0;
+      faces[fi * 3 + 1] = c1;
+      faces[fi * 3 + 2] = c2;
 
       if (c0 === c1 || c1 === c2 || c0 === c2) {
         faceAlive[fi] = 0;
@@ -308,7 +388,9 @@ export function qemSimplify(
         for (const c of [c0, c1, c2]) vertFaces[c].delete(fi);
       } else {
         vertFaces[vi].add(fi);
-        newNeighbors.add(c0); newNeighbors.add(c1); newNeighbors.add(c2);
+        newNeighbors.add(c0);
+        newNeighbors.add(c1);
+        newNeighbors.add(c2);
       }
     }
     vertFaces[vj].clear();
@@ -316,26 +398,37 @@ export function qemSimplify(
     // 4. SECOND PASS: Finalize vi's quadrics and neighbors
     for (const fi of vertFaces[vi]) {
       if (!faceAlive[fi]) continue;
-      
+
       // Re-sum the quadric for THIS specific live face
       // (This logic mirrors your computeQuadrics function)
-      const i0 = faces[fi*3], i1 = faces[fi*3+1], i2 = faces[fi*3+2];
-      const ax = pos[i0*3], ay = pos[i0*3+1], az = pos[i0*3+2];
-      const bx = pos[i1*3], by = pos[i1*3+1], bz = pos[i1*3+2];
-      const cx = pos[i2*3], cy = pos[i2*3+1], cz = pos[i2*3+2];
-      let nx = (by-ay)*(cz-az) - (bz-az)*(cy-ay);
-      let ny = (bz-az)*(cx-ax) - (bx-ax)*(cz-az);
-      let nz = (bx-ax)*(cy-ay) - (by-ay)*(cx-ax);
-      const len = Math.sqrt(nx*nx + ny*ny + nz*nz);
+      const i0 = faces[fi * 3],
+        i1 = faces[fi * 3 + 1],
+        i2 = faces[fi * 3 + 2];
+      const ax = pos[i0 * 3],
+        ay = pos[i0 * 3 + 1],
+        az = pos[i0 * 3 + 2];
+      const bx = pos[i1 * 3],
+        by = pos[i1 * 3 + 1],
+        bz = pos[i1 * 3 + 2];
+      const cx = pos[i2 * 3],
+        cy = pos[i2 * 3 + 1],
+        cz = pos[i2 * 3 + 2];
+      let nx = (by - ay) * (cz - az) - (bz - az) * (cy - ay);
+      let ny = (bz - az) * (cx - ax) - (bx - ax) * (cz - az);
+      let nz = (bx - ax) * (cy - ay) - (by - ay) * (cx - ax);
+      const len = Math.sqrt(nx * nx + ny * ny + nz * nz);
       if (len > 1e-12) {
-        nx /= len; ny /= len; nz /= len;
-        const d = -(nx*ax + ny*ay + nz*az);
+        nx /= len;
+        ny /= len;
+        nz /= len;
+        const d = -(nx * ax + ny * ay + nz * az);
         const p = [nx, ny, nz, d];
         for (let r = 0; r < 4; r++)
-          for (let c = 0; c < 4; c++)
-            Q[vi * 16 + r*4 + c] += p[r] * p[c];
+          for (let c = 0; c < 4; c++) Q[vi * 16 + r * 4 + c] += p[r] * p[c];
       }
-      newNeighbors.add(i0); newNeighbors.add(i1); newNeighbors.add(i2);
+      newNeighbors.add(i0);
+      newNeighbors.add(i1);
+      newNeighbors.add(i2);
     }
 
     // 5. RE-PUSH EDGES (Ensures app doesn't hang)
@@ -344,7 +437,7 @@ export function qemSimplify(
       const targetNb = find(nb);
       if (targetNb !== vi) {
         // Clear the key so pushEdge can update the cost in the heap
-        edgeSeen.delete(edgeKey(vi, targetNb)); 
+        edgeSeen.delete(edgeKey(vi, targetNb));
         pushEdge(vi, targetNb);
       }
     }
@@ -357,7 +450,9 @@ export function qemSimplify(
   const validFacesList: number[] = [];
   for (let fi = 0; fi < nFacesOrig; fi++) {
     if (!faceAlive[fi]) continue;
-    const a = find(faces[fi*3]), b = find(faces[fi*3+1]), c = find(faces[fi*3+2]);
+    const a = find(faces[fi * 3]),
+      b = find(faces[fi * 3 + 1]),
+      c = find(faces[fi * 3 + 2]);
     if (a !== b && b !== c && a !== c) validFacesList.push(a, b, c);
   }
 
@@ -370,7 +465,9 @@ export function qemSimplify(
   const compactToOriginal = new Int32Array(nCompact);
   for (let i = 0; i < nCompact; i++) {
     const r = usedRoots[i];
-    compactVerts[i*3] = pos[r*3]; compactVerts[i*3+1] = pos[r*3+1]; compactVerts[i*3+2] = pos[r*3+2];
+    compactVerts[i * 3] = pos[r * 3];
+    compactVerts[i * 3 + 1] = pos[r * 3 + 1];
+    compactVerts[i * 3 + 2] = pos[r * 3 + 2];
     compactToOriginal[i] = r;
   }
 
@@ -446,7 +543,13 @@ export function qemSimplify(
 // Build Three.js morph mesh
 // ─────────────────────────────────────────────────────────────────────────────
 
-function buildMorphMesh(simpVerts: Float32Array, simpFaces: Uint32Array, origNeutral: Float64Array, origSmile: Float64Array, compactToOriginal: Int32Array): THREE.Mesh {
+function buildMorphMesh(
+  simpVerts: Float32Array,
+  simpFaces: Uint32Array,
+  origNeutral: Float64Array,
+  origSmile: Float64Array,
+  compactToOriginal: Int32Array,
+): THREE.Mesh {
   const geo = new THREE.BufferGeometry();
   geo.setAttribute("position", new THREE.BufferAttribute(simpVerts, 3));
   geo.setIndex(new THREE.BufferAttribute(simpFaces, 1));
@@ -460,13 +563,13 @@ function buildMorphMesh(simpVerts: Float32Array, simpFaces: Uint32Array, origNeu
     // smilePos[i*3 + 2] = simpVerts[i*3 + 2] + dispVerts[i*3 + 2];
     const orig = compactToOriginal[i];
 
-    const dx = origSmile[orig*3]     - origNeutral[orig*3];
-    const dy = origSmile[orig*3 + 1] - origNeutral[orig*3 + 1];
-    const dz = origSmile[orig*3 + 2] - origNeutral[orig*3 + 2];
+    const dx = origSmile[orig * 3] - origNeutral[orig * 3];
+    const dy = origSmile[orig * 3 + 1] - origNeutral[orig * 3 + 1];
+    const dz = origSmile[orig * 3 + 2] - origNeutral[orig * 3 + 2];
 
-    smilePos[i*3]     = simpVerts[i*3]     + dx;
-    smilePos[i*3 + 1] = simpVerts[i*3 + 1] + dy;
-    smilePos[i*3 + 2] = simpVerts[i*3 + 2] + dz;
+    smilePos[i * 3] = simpVerts[i * 3] + dx;
+    smilePos[i * 3 + 1] = simpVerts[i * 3 + 1] + dy;
+    smilePos[i * 3 + 2] = simpVerts[i * 3 + 2] + dz;
   }
 
   const smileAttr = new THREE.BufferAttribute(smilePos, 3);
@@ -474,7 +577,10 @@ function buildMorphMesh(simpVerts: Float32Array, simpFaces: Uint32Array, origNeu
 
   geo.computeVertexNormals();
 
-  const mesh = new THREE.Mesh(geo, new THREE.MeshStandardMaterial({ color: 0xdddddd, flatShading: true }));
+  const mesh = new THREE.Mesh(
+    geo,
+    new THREE.MeshStandardMaterial({ color: 0xdddddd, flatShading: false }),
+  );
   mesh.morphTargetInfluences = [0];
   return mesh;
 }
@@ -494,16 +600,16 @@ function extractIndexedVerts(neutralObj: THREE.Group, smileObj: THREE.Group) {
   const uniqueVerts: number[] = [];
   const indices = new Int32Array(count);
   const hashTable = new Map<string, number>();
-  
+
   // Precision for welding (snaps vertices within 0.0001 units)
-  const precision = 10000; 
+  const precision = 10000;
 
   let nextIndex = 0;
   for (let i = 0; i < count; i++) {
     const x = nPos.getX(i);
     const y = nPos.getY(i);
     const z = nPos.getZ(i);
-    
+
     // Create a string key based on rounded coordinates
     const key = `${Math.round(x * precision)}_${Math.round(y * precision)}_${Math.round(z * precision)}`;
 
@@ -526,17 +632,17 @@ function extractIndexedVerts(neutralObj: THREE.Group, smileObj: THREE.Group) {
   for (let i = 0; i < count; i++) {
     const newIdx = indices[i];
     if (seenIndex[newIdx] === 0) {
-      sVertsFinal[newIdx * 3]     = sPos.getX(i);
+      sVertsFinal[newIdx * 3] = sPos.getX(i);
       sVertsFinal[newIdx * 3 + 1] = sPos.getY(i);
       sVertsFinal[newIdx * 3 + 2] = sPos.getZ(i);
       seenIndex[newIdx] = 1;
     }
   }
 
-  return { 
-    origNeutral: nVertsFinal, 
-    origSmile: sVertsFinal, 
-    origFaces: new Int32Array(indices) 
+  return {
+    origNeutral: nVertsFinal,
+    origSmile: sVertsFinal,
+    origFaces: new Int32Array(indices),
   };
 }
 
@@ -544,8 +650,14 @@ function extractIndexedVerts(neutralObj: THREE.Group, smileObj: THREE.Group) {
 // UI helpers
 // ─────────────────────────────────────────────────────────────────────────────
 
-function setStatus(msg: string) { const el = document.getElementById("status"); if (el) el.innerHTML = msg; }
-function setProgress(f: number) { const bar = document.getElementById("progress-bar") as HTMLElement | null; if (bar) bar.style.width = `${Math.round(f*100)}%`; }
+function setStatus(msg: string) {
+  const el = document.getElementById("status");
+  if (el) el.innerHTML = msg;
+}
+function setProgress(f: number) {
+  const bar = document.getElementById("progress-bar") as HTMLElement | null;
+  if (bar) bar.style.width = `${Math.round(f * 100)}%`;
+}
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Main
@@ -558,50 +670,82 @@ const [baseFaceObj, smileFaceObj] = await Promise.all([
   loader.loadAsync("ksHead/ksHeadNormal.obj"),
   loader.loadAsync("ksHead/ksHeadSmile.obj"),
 ]);
-const { origNeutral, origSmile, origFaces } = extractIndexedVerts(baseFaceObj, smileFaceObj);
-console.log(`[Load] neutral: ${origNeutral.length} verts, ${origFaces.length} faces`);
-console.log(`[Load] smile: ${origSmile.length} verts`)
+const { origNeutral, origSmile, origFaces } = extractIndexedVerts(
+  baseFaceObj,
+  smileFaceObj,
+);
+console.log(
+  `[Load] neutral: ${origNeutral.length} verts, ${origFaces.length} faces`,
+);
+console.log(`[Load] smile: ${origSmile.length} verts`);
 
 setStatus("Ready — adjust ratio and click Apply.");
-let currentMesh: THREE.Mesh | null = null;
+let meshes: THREE.Mesh[] = [];
 
 async function applySimplification(ratio: number) {
   setStatus("Simplifying…");
   setProgress(0);
-  if (currentMesh) { scene.remove(currentMesh); currentMesh = null; }
-  await new Promise(r => setTimeout(r, 16));
+  meshes.forEach((m) => scene.remove(m));
+  meshes = [];
+  await new Promise((r) => setTimeout(r, 16));
 
-  const result = qemSimplify(origNeutral, origFaces, ratio, f => setProgress(f));
+  const result = qemSimplify(origNeutral, origFaces, ratio, (f) =>
+    setProgress(f),
+  );
 
   setStatus("Transferring smile…");
-  await new Promise(r => setTimeout(r, 4));
-  // const disp = transferDisplacement(origNeutral, origSmile, result.vertices, result.compactToOriginal);
+  await new Promise((r) => setTimeout(r, 4));
 
   setStatus("Building mesh…");
-  await new Promise(r => setTimeout(r, 4));
-  currentMesh = buildMorphMesh(result.vertices, result.faces, origNeutral, origSmile, result.compactToOriginal);
-  scene.add(currentMesh);
+  await new Promise((r) => setTimeout(r, 4));
+  const template = buildMorphMesh(
+    result.vertices,
+    result.faces,
+    origNeutral,
+    origSmile,
+    result.compactToOriginal,
+  );
+
+  // MARK: Clone Mesh
+  const spacing = 30;
+  for (let x = 0; x < 100; x++) {
+    for (let z = 0; z < 10; z++) {
+      const mesh = template.clone();
+      mesh.position.set((x - 4.5) * spacing, 0, (z - 4.5) * spacing);
+      scene.add(mesh);
+      meshes.push(mesh);
+    }
+  }
 
   setProgress(1);
-  setStatus(`${result.vertices.length/3} verts · ${result.faces.length/3} faces · ratio ${ratio.toFixed(2)}`);
+  setStatus(
+    `${result.vertices.length / 3} verts · ${result.faces.length / 3} faces · ratio ${ratio.toFixed(2)}`,
+  );
 }
 
-const ratioSlider  = document.getElementById("ratio-slider")  as HTMLInputElement;
+const ratioSlider = document.getElementById("ratio-slider") as HTMLInputElement;
 const ratioDisplay = document.getElementById("ratio-display") as HTMLElement;
-const morphSlider  = document.getElementById("morph-slider")  as HTMLInputElement;
+const morphSlider = document.getElementById("morph-slider") as HTMLInputElement;
 const morphDisplay = document.getElementById("morph-display") as HTMLElement;
-const applyBtn     = document.getElementById("apply-btn")     as HTMLButtonElement;
+const applyBtn = document.getElementById("apply-btn") as HTMLButtonElement;
 
-ratioSlider.addEventListener("input", () => { ratioDisplay.textContent = `${ratioSlider.value}%`; });
+ratioSlider.addEventListener("input", () => {
+  ratioDisplay.textContent = `${ratioSlider.value}%`;
+});
 morphSlider.addEventListener("input", () => {
   morphDisplay.textContent = `${morphSlider.value}%`;
-  if (currentMesh?.morphTargetInfluences) currentMesh.morphTargetInfluences[0] = parseFloat(morphSlider.value) / 100;
+  meshes.forEach((m) => {
+    if (m.morphTargetInfluences)
+      m.morphTargetInfluences[0] = parseFloat(morphSlider.value) / 100;
+  });
 });
 applyBtn.addEventListener("click", async () => {
   applyBtn.disabled = true;
   morphDisplay.textContent = `0%`;
-  morphSlider.value = '0';
-  if (currentMesh?.morphTargetInfluences) currentMesh.morphTargetInfluences[0] = 0;
+  morphSlider.value = "0";
+  meshes.forEach((m) => {
+    if (m.morphTargetInfluences) m.morphTargetInfluences[0] = 0;
+  });
   await applySimplification(parseInt(ratioSlider.value) / 100);
   applyBtn.disabled = false;
 });
@@ -610,8 +754,36 @@ await applySimplification(1.0);
 ratioSlider.value = "100";
 ratioDisplay.textContent = "100%";
 
+const fpsDisplay = document.createElement("div");
+fpsDisplay.style.position = "absolute";
+fpsDisplay.style.top = "10px";
+fpsDisplay.style.left = "10px";
+fpsDisplay.style.color = "white";
+fpsDisplay.style.backgroundColor = "rgba(0, 0, 0, 0.5)";
+fpsDisplay.style.padding = "5px 10px";
+fpsDisplay.style.fontFamily = "monospace";
+fpsDisplay.style.pointerEvents = "none";
+fpsDisplay.style.zIndex = "1000";
+document.body.appendChild(fpsDisplay);
+
+let lastTime = performance.now();
+let frames = 0;
+
 function animate() {
   requestAnimationFrame(animate);
+
+  const now = performance.now();
+  frames++;
+  if (now > lastTime + 1000) {
+    fpsDisplay.textContent = `FPS: ${Math.round((frames * 1000) / (now - lastTime))}`;
+    lastTime = now;
+    frames = 0;
+  }
+
+  // const t = (Math.sin(Date.now() * 0.001) + 1) / 2;
+  // meshes.forEach((m) => {
+  //   if (m.morphTargetInfluences) m.morphTargetInfluences[0] = t;
+  // });
   controls.update();
   directionalLight.position.copy(camera.position);
   renderer.render(scene, camera);

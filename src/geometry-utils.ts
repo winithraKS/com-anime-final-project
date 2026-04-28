@@ -58,3 +58,47 @@ export function extractIndexedVerts(neutralObj: THREE.Group, smileObj: THREE.Gro
     origFaces: new Int32Array(indices),
   };
 }
+
+export interface KDNode {
+  idx: number;
+  axis: number;
+  left?: KDNode;
+  right?: KDNode;
+}
+
+export function buildKDTree(indices: number[], verts: Float64Array, depth = 0): KDNode | undefined {
+  if (!indices.length) return undefined;
+  const axis = depth % 3;
+  indices.sort((a, b) => verts[a * 3 + axis] - verts[b * 3 + axis]);
+  const mid = indices.length >> 1;
+  return {
+    idx: indices[mid],
+    axis,
+    left: buildKDTree(indices.slice(0, mid), verts, depth + 1),
+    right: buildKDTree(indices.slice(mid + 1), verts, depth + 1),
+  };
+}
+
+export function kdNearest(
+  node: KDNode | undefined,
+  verts: Float64Array,
+  qx: number,
+  qy: number,
+  qz: number,
+  best: { dist: number; idx: number }
+) {
+  if (!node) return;
+  const px = verts[node.idx * 3],
+    py = verts[node.idx * 3 + 1],
+    pz = verts[node.idx * 3 + 2];
+  const d = (qx - px) ** 2 + (qy - py) ** 2 + (qz - pz) ** 2;
+  if (d < best.dist) {
+    best.dist = d;
+    best.idx = node.idx;
+  }
+  const diff = [qx, qy, qz][node.axis] - [px, py, pz][node.axis];
+  const near = diff < 0 ? node.left : node.right;
+  const far = diff < 0 ? node.right : node.left;
+  kdNearest(near, verts, qx, qy, qz, best);
+  if (diff * diff < best.dist) kdNearest(far, verts, qx, qy, qz, best);
+}

@@ -34,9 +34,14 @@ export async function createComparisonMeshes(filename: string = "ksHead/bunny30k
 
   group.traverse((child) => {
     if (child instanceof THREE.Mesh) {
-      // OBJLoader returns non-indexed polygon soup. We MUST merge vertices
-      // (weld them) so the SimplifyModifier can detect shared edges!
+      // OBJLoader returns non-indexed polygon soup.
+      // MUST delete normals/uvs first so mergeVertices merges purely by position!
+      // Otherwise, vertices on face edges with different normals won't weld.
+      child.geometry.deleteAttribute("normal");
+      child.geometry.deleteAttribute("uv");
+      
       faceGeo = BufferGeometryUtils.mergeVertices(child.geometry);
+      faceGeo.computeVertexNormals();
     }
   });
 

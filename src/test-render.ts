@@ -2,7 +2,7 @@ import * as THREE from "three";
 import { OrbitControls } from "three/examples/jsm/controls/OrbitControls.js";
 import { createComparisonMeshes, simplifyGeometry } from "./test";
 import { qemSimplify } from "./qem";
-import { extractIndexedVerts } from "./geometry-utils";
+import { extractIndexedVerts, buildKDTree, kdNearest, type KDNode } from "./geometry-utils";
 import { OBJLoader } from "three/addons/loaders/OBJLoader.js";
 
 // 1. Scene setup
@@ -41,6 +41,7 @@ let origNeutral: Float64Array | null = null;
 let origSmile: Float64Array | null = null;
 let origFaces: Int32Array | null = null;
 let currentCompactToOriginal: Int32Array | null = null;
+let kdTree: KDNode | undefined = undefined;
 
 const loader = new OBJLoader();
 
@@ -62,6 +63,7 @@ async function loadModel(filename: string) {
   origNeutral = null;
   origSmile = null;
   origFaces = null;
+  kdTree = undefined;
   if (filename === "base.obj") {
     const smileGroup = await loader.loadAsync("ksHead/smile.obj");
     const neutralGroup = await loader.loadAsync("ksHead/base.obj");
@@ -69,6 +71,11 @@ async function loadModel(filename: string) {
     origNeutral = extracted.origNeutral;
     origSmile = extracted.origSmile;
     origFaces = extracted.origFaces;
+
+    // Build KD tree for fallback
+    const nOrig = origNeutral.length / 3;
+    const allIndices = Array.from({ length: nOrig }, (_, i) => i);
+    kdTree = buildKDTree(allIndices, origNeutral);
   }
 
   // Dynamic scaling
@@ -149,16 +156,26 @@ if (slider && ratioValueDisplay && applyBtn && statusDisplay) {
       simplifiedMesh.geometry.dispose();
       simplifiedMesh.geometry = newGeo;
 
-      // BROKEN MORPH FOR SIMPLIFYMODIFIER
-      if (origNeutral && origSmile) {
+      // KD-TREE MORPH FOR SIMPLIFYMODIFIER
+      if (origNeutral && origSmile && kdTree) {
         const morphPos = new Float32Array(newGeo.attributes.position.count * 3);
+        const origDisp = new Float32Array(origNeutral.length);
+        for (let i = 0; i < origNeutral.length; i++) {
+          origDisp[i] = origSmile[i] - origNeutral[i];
+        }
+
         for (let i = 0; i < morphPos.length / 3; i++) {
-          const dx = origSmile[i * 3] - origNeutral[i * 3] || 0;
-          const dy = origSmile[i * 3 + 1] - origNeutral[i * 3 + 1] || 0;
-          const dz = origSmile[i * 3 + 2] - origNeutral[i * 3 + 2] || 0;
-          morphPos[i * 3] = newGeo.attributes.position.getX(i) + dx;
-          morphPos[i * 3 + 1] = newGeo.attributes.position.getY(i) + dy;
-          morphPos[i * 3 + 2] = newGeo.attributes.position.getZ(i) + dz;
+          const qx = newGeo.attributes.position.getX(i);
+          const qy = newGeo.attributes.position.getY(i);
+          const qz = newGeo.attributes.position.getZ(i);
+
+          const best = { dist: Infinity, idx: 0 };
+          kdNearest(kdTree, origNeutral, qx, qy, qz, best);
+
+          const origIdx = best.idx;
+          morphPos[i * 3] = qx + origDisp[origIdx * 3];
+          morphPos[i * 3 + 1] = qy + origDisp[origIdx * 3 + 1];
+          morphPos[i * 3 + 2] = qz + origDisp[origIdx * 3 + 2];
         }
         newGeo.morphAttributes.position = [new THREE.BufferAttribute(morphPos, 3)];
         simplifiedMesh.morphTargetInfluences = [0];

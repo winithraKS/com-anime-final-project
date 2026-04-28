@@ -1,8 +1,13 @@
 import * as THREE from "three";
 import { OrbitControls } from "three/examples/jsm/controls/OrbitControls.js";
-import { createComparisonMeshes, simplifyGeometry } from "./test";
+import { createComparisonMeshes, simplifyGeometry } from "./simplifyModifier";
 import { qemSimplify } from "./qem";
-import { extractIndexedVerts, buildKDTree, kdNearest, type KDNode } from "./geometry-utils";
+import {
+  extractIndexedVerts,
+  buildKDTree,
+  kdNearest,
+  type KDNode,
+} from "./geometry-utils";
 import { OBJLoader } from "three/addons/loaders/OBJLoader.js";
 
 // 1. Scene setup
@@ -59,14 +64,14 @@ async function loadModel(filename: string) {
   simplifiedMesh = result.simplifiedMesh;
   faceGeo = result.faceGeo;
 
-  // Load smile if base.obj
+  // Load smile if flame_base.obj
   origNeutral = null;
   origSmile = null;
   origFaces = null;
   kdTree = undefined;
-  if (filename === "base.obj") {
-    const smileGroup = await loader.loadAsync("ksHead/smile.obj");
-    const neutralGroup = await loader.loadAsync("ksHead/base.obj");
+  if (filename === "flame_base.obj") {
+    const smileGroup = await loader.loadAsync("ksHead/flame_smile.obj");
+    const neutralGroup = await loader.loadAsync("ksHead/flame_base.obj");
     const extracted = extractIndexedVerts(neutralGroup, smileGroup);
     origNeutral = extracted.origNeutral;
     origSmile = extracted.origSmile;
@@ -177,7 +182,9 @@ if (slider && ratioValueDisplay && applyBtn && statusDisplay) {
           morphPos[i * 3 + 1] = qy + origDisp[origIdx * 3 + 1];
           morphPos[i * 3 + 2] = qz + origDisp[origIdx * 3 + 2];
         }
-        newGeo.morphAttributes.position = [new THREE.BufferAttribute(morphPos, 3)];
+        newGeo.morphAttributes.position = [
+          new THREE.BufferAttribute(morphPos, 3),
+        ];
         simplifiedMesh.morphTargetInfluences = [0];
       }
 
@@ -219,7 +226,9 @@ if (slider && ratioValueDisplay && applyBtn && statusDisplay) {
           morphPos[i * 3 + 1] = qemResult.vertices[i * 3 + 1] + dy;
           morphPos[i * 3 + 2] = qemResult.vertices[i * 3 + 2] + dz;
         }
-        qemGeo.morphAttributes.position = [new THREE.BufferAttribute(morphPos, 3)];
+        qemGeo.morphAttributes.position = [
+          new THREE.BufferAttribute(morphPos, 3),
+        ];
         originalMesh.morphTargetInfluences = [0];
       }
 
@@ -228,7 +237,16 @@ if (slider && ratioValueDisplay && applyBtn && statusDisplay) {
       originalMesh.geometry = qemGeo;
 
       applyBtn.disabled = false;
-      statusDisplay.textContent = `QEM: ${(end2 - start2).toFixed(0)}ms (${qemResult.vertices.length / 3} verts) | SimplifyModifier: ${(end1 - start1).toFixed(0)}ms (${newGeo.attributes.position.count} verts)`;
+      statusDisplay.innerHTML = `
+        <div>
+          <div class="status-title qem-color">QEM</div>
+          <div class="status-data">Time: ${(end2 - start2).toFixed(0)}ms · Verts: ${qemResult.vertices.length / 3}</div>
+        </div>
+        <div class="status-divider">
+          <div class="status-title simp-color">Simplify Modifier</div>
+          <div class="status-data">Time: ${(end1 - start1).toFixed(0)}ms · Verts: ${newGeo.attributes.position.count}</div>
+        </div>
+      `;
     }, 50);
   });
 }

@@ -140,8 +140,6 @@ function buildMorphMesh(
   return mesh;
 }
 
-
-
 // ─────────────────────────────────────────────────────────────────────────────
 // UI helpers
 // ─────────────────────────────────────────────────────────────────────────────
@@ -244,9 +242,10 @@ async function applySimplification(ratio: number) {
   }
 
   setProgress(1);
-  setStatus(
-    `Done in ${(end - start).toFixed(0)}ms · ${result.vertices.length / 3} verts · ${result.faces.length / 3} faces · ratio ${ratio.toFixed(2)}`,
-  );
+  setStatus(`
+    <div class="status-title qem-color">QEM</div>
+    <div class="status-data">Time: ${(end - start).toFixed(0)}ms · Verts: ${result.vertices.length / 3}</div>
+  `);
 }
 
 const ratioSlider = document.getElementById("ratio-slider") as HTMLInputElement;
@@ -295,15 +294,20 @@ ratioSlider.value = "100";
 ratioDisplay.textContent = "100%";
 
 const fpsDisplay = document.createElement("div");
-fpsDisplay.style.position = "absolute";
+fpsDisplay.style.position = "fixed";
 fpsDisplay.style.top = "10px";
 fpsDisplay.style.left = "10px";
 fpsDisplay.style.color = "white";
-fpsDisplay.style.backgroundColor = "rgba(0, 0, 0, 0.5)";
-fpsDisplay.style.padding = "5px 10px";
-fpsDisplay.style.fontFamily = "monospace";
+fpsDisplay.style.backgroundColor = "rgba(20, 20, 24, 0.9)";
+fpsDisplay.style.backdropFilter = "blur(12px)";
+fpsDisplay.style.padding = "8px 16px";
+fpsDisplay.style.borderRadius = "8px";
+fpsDisplay.style.border = "1px solid rgba(255, 255, 255, 0.2)";
+fpsDisplay.style.fontFamily = "'JetBrains Mono', monospace";
+fpsDisplay.style.fontSize = "12px";
 fpsDisplay.style.pointerEvents = "none";
 fpsDisplay.style.zIndex = "1000";
+fpsDisplay.style.boxShadow = "0 4px 16px rgba(0,0,0,0.5)";
 document.body.appendChild(fpsDisplay);
 
 let lastTime = performance.now();

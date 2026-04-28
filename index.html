@@ -1,4 +1,4 @@
-<!DOCTYPE html>
+<!doctype html>
 <html lang="en">
   <head>
     <meta charset="UTF-8" />
@@ -10,6 +10,17 @@
     <!-- Control panel -->
     <div id="panel">
       <h2>Face simplification</h2>
+
+      <label>
+        Model
+        <select id="model-select">
+          <option value="base.obj">base.obj</option>
+          <option value="bunny30k.obj" selected>bunny30k.obj</option>
+          <option value="ksHeadNormal.obj">ksHeadNormal.obj</option>
+        </select>
+      </label>
+
+      <hr />
 
       <label>
         Simplification ratio
@@ -36,7 +47,7 @@
       <hr />
 
       <label>
-        Smile 
+        Smile
         <span id="morph-display" class="value">0%</span>
       </label>
       <input
@@ -48,6 +59,14 @@
         step="1"
       />
       <p class="hint">Drag to blend between neutral and smile.</p>
+
+      <hr />
+      <button
+        id="switch-btn"
+        onclick="window.location.href = 'test.html'"
+      >
+        Switch to Comparison Test
+      </button>
     </div>
     <canvas id="bg"></canvas>
     <script type="module" src="/src/main.ts"></script>

@@ -54,6 +54,17 @@ body {
   font-weight: 500;
 }
 
+#panel select {
+  background: #2a2a30;
+  color: #fff;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 4px;
+  font-size: 12px;
+  padding: 2px 4px;
+  outline: none;
+  cursor: pointer;
+}
+
 #panel input[type="range"] {
   width: 100%;
   accent-color: #7f77dd;
@@ -66,7 +77,7 @@ body {
   line-height: 1.4;
 }
 
-#apply-btn {
+#panel button {
   margin-top: 2px;
   padding: 8px 12px;
   background: #534ab7;
@@ -78,9 +89,9 @@ body {
   cursor: pointer;
   transition: background 0.15s;
 }
-#apply-btn:hover  { background: #6358c8; }
-#apply-btn:active { background: #3c3489; }
-#apply-btn:disabled {
+#panel button:hover  { background: #6358c8; }
+#panel button:active { background: #3c3489; }
+#panel button:disabled {
   background: #3a3650;
   color: #7a786f;
   cursor: not-allowed;

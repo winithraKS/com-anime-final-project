@@ -2,6 +2,8 @@ import * as THREE from "three";
 import { OrbitControls } from "three/examples/jsm/controls/OrbitControls.js";
 import { createComparisonMeshes, simplifyGeometry } from "./test";
 import { qemSimplify } from "./qem";
+import { extractIndexedVerts } from "./geometry-utils";
+import { OBJLoader } from "three/addons/loaders/OBJLoader.js";
 
 // 1. Scene setup
 const scene = new THREE.Scene();
@@ -35,6 +37,13 @@ let originalMesh: THREE.Mesh;
 let simplifiedMesh: THREE.Mesh;
 let faceGeo: THREE.BufferGeometry;
 
+let origNeutral: Float64Array | null = null;
+let origSmile: Float64Array | null = null;
+let origFaces: Int32Array | null = null;
+let currentCompactToOriginal: Int32Array | null = null;
+
+const loader = new OBJLoader();
+
 const modelSelect = document.getElementById(
   "model-select",
 ) as HTMLSelectElement;
@@ -48,6 +57,19 @@ async function loadModel(filename: string) {
   originalMesh = result.originalMesh;
   simplifiedMesh = result.simplifiedMesh;
   faceGeo = result.faceGeo;
+
+  // Load smile if base.obj
+  origNeutral = null;
+  origSmile = null;
+  origFaces = null;
+  if (filename === "base.obj") {
+    const smileGroup = await loader.loadAsync("ksHead/smile.obj");
+    const neutralGroup = await loader.loadAsync("ksHead/base.obj");
+    const extracted = extractIndexedVerts(neutralGroup, smileGroup);
+    origNeutral = extracted.origNeutral;
+    origSmile = extracted.origSmile;
+    origFaces = extracted.origFaces;
+  }
 
   // Dynamic scaling
   faceGeo.computeBoundingBox();
@@ -127,15 +149,39 @@ if (slider && ratioValueDisplay && applyBtn && statusDisplay) {
       simplifiedMesh.geometry.dispose();
       simplifiedMesh.geometry = newGeo;
 
+      // BROKEN MORPH FOR SIMPLIFYMODIFIER
+      if (origNeutral && origSmile) {
+        const morphPos = new Float32Array(newGeo.attributes.position.count * 3);
+        for (let i = 0; i < morphPos.length / 3; i++) {
+          const dx = origSmile[i * 3] - origNeutral[i * 3] || 0;
+          const dy = origSmile[i * 3 + 1] - origNeutral[i * 3 + 1] || 0;
+          const dz = origSmile[i * 3 + 2] - origNeutral[i * 3 + 2] || 0;
+          morphPos[i * 3] = newGeo.attributes.position.getX(i) + dx;
+          morphPos[i * 3 + 1] = newGeo.attributes.position.getY(i) + dy;
+          morphPos[i * 3 + 2] = newGeo.attributes.position.getZ(i) + dz;
+        }
+        newGeo.morphAttributes.position = [new THREE.BufferAttribute(morphPos, 3)];
+        simplifiedMesh.morphTargetInfluences = [0];
+      }
+
       // QEM
-      const pos = faceGeo.attributes.position.array;
-      const index = faceGeo.index!.array;
-      const vertsIn = new Float64Array(pos);
-      const facesIn = new Int32Array(index);
+      let vertsIn: Float64Array;
+      let facesIn: Int32Array;
+
+      if (origNeutral && origFaces) {
+        vertsIn = origNeutral;
+        facesIn = origFaces;
+      } else {
+        const pos = faceGeo.attributes.position.array;
+        const index = faceGeo.index!.array;
+        vertsIn = new Float64Array(pos);
+        facesIn = new Int32Array(index);
+      }
 
       const start2 = performance.now();
       const qemResult = qemSimplify(vertsIn, facesIn, ratio);
       const end2 = performance.now();
+      currentCompactToOriginal = qemResult.compactToOriginal;
 
       const qemGeo = new THREE.BufferGeometry();
       qemGeo.setAttribute(
@@ -143,14 +189,46 @@ if (slider && ratioValueDisplay && applyBtn && statusDisplay) {
         new THREE.BufferAttribute(qemResult.vertices, 3),
       );
       qemGeo.setIndex(new THREE.BufferAttribute(qemResult.faces, 1));
-      qemGeo.computeVertexNormals();
 
+      // CORRECT MORPH FOR QEM
+      if (origNeutral && origSmile && currentCompactToOriginal) {
+        const morphPos = new Float32Array(qemResult.vertices.length);
+        for (let i = 0; i < qemResult.vertices.length / 3; i++) {
+          const orig = currentCompactToOriginal[i];
+          const dx = origSmile[orig * 3] - origNeutral[orig * 3];
+          const dy = origSmile[orig * 3 + 1] - origNeutral[orig * 3 + 1];
+          const dz = origSmile[orig * 3 + 2] - origNeutral[orig * 3 + 2];
+          morphPos[i * 3] = qemResult.vertices[i * 3] + dx;
+          morphPos[i * 3 + 1] = qemResult.vertices[i * 3 + 1] + dy;
+          morphPos[i * 3 + 2] = qemResult.vertices[i * 3 + 2] + dz;
+        }
+        qemGeo.morphAttributes.position = [new THREE.BufferAttribute(morphPos, 3)];
+        originalMesh.morphTargetInfluences = [0];
+      }
+
+      qemGeo.computeVertexNormals();
       originalMesh.geometry.dispose();
       originalMesh.geometry = qemGeo;
 
       applyBtn.disabled = false;
       statusDisplay.textContent = `QEM: ${(end2 - start2).toFixed(0)}ms (${qemResult.vertices.length / 3} verts) | SimplifyModifier: ${(end1 - start1).toFixed(0)}ms (${newGeo.attributes.position.count} verts)`;
     }, 50);
+  });
+}
+
+const morphSlider = document.getElementById("morph-slider") as HTMLInputElement;
+const morphValueDisplay = document.getElementById("morph-value");
+
+if (morphSlider && morphValueDisplay) {
+  morphSlider.addEventListener("input", () => {
+    const val = parseInt(morphSlider.value) / 100;
+    morphValueDisplay.textContent = `${morphSlider.value}%`;
+    if (originalMesh.morphTargetInfluences) {
+      originalMesh.morphTargetInfluences[0] = val;
+    }
+    if (simplifiedMesh.morphTargetInfluences) {
+      simplifiedMesh.morphTargetInfluences[0] = val;
+    }
   });
 }
 

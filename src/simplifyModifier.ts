@@ -28,7 +28,9 @@ export function simplifyGeometry(
 /**
  * Creates both original and simplified meshes for initial comparison.
  */
-export async function createComparisonMeshes(filename: string = "ksHead/bunny30k.obj") {
+export async function createComparisonMeshes(
+  filename: string = "models/bunny30k.obj",
+) {
   const group = await loader.loadAsync(filename);
   let faceGeo: THREE.BufferGeometry | null = null;
 
@@ -39,7 +41,7 @@ export async function createComparisonMeshes(filename: string = "ksHead/bunny30k
       // Otherwise, vertices on face edges with different normals won't weld.
       child.geometry.deleteAttribute("normal");
       child.geometry.deleteAttribute("uv");
-      
+
       faceGeo = BufferGeometryUtils.mergeVertices(child.geometry);
       faceGeo.computeVertexNormals();
     }

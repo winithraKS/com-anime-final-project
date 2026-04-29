@@ -59,7 +59,7 @@ async function loadModel(filename: string) {
   if (originalMesh) scene.remove(originalMesh);
   if (simplifiedMesh) scene.remove(simplifiedMesh);
 
-  const result = await createComparisonMeshes(`ksHead/${filename}`);
+  const result = await createComparisonMeshes(`models/${filename}`);
   originalMesh = result.originalMesh;
   simplifiedMesh = result.simplifiedMesh;
   faceGeo = result.faceGeo;
@@ -70,8 +70,8 @@ async function loadModel(filename: string) {
   origFaces = null;
   kdTree = undefined;
   if (filename === "flame_base.obj") {
-    const smileGroup = await loader.loadAsync("ksHead/flame_smile.obj");
-    const neutralGroup = await loader.loadAsync("ksHead/flame_base.obj");
+    const smileGroup = await loader.loadAsync("models/flame_smile.obj");
+    const neutralGroup = await loader.loadAsync("models/flame_base.obj");
     const extracted = extractIndexedVerts(neutralGroup, smileGroup);
     origNeutral = extracted.origNeutral;
     origSmile = extracted.origSmile;

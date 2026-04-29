@@ -178,8 +178,8 @@ async function loadModel(filename: string) {
   }
 
   const [baseFaceObj, smileFaceObj] = await Promise.all([
-    loader.loadAsync(`ksHead/${filename}`),
-    loader.loadAsync(`ksHead/${smileFilename}`),
+    loader.loadAsync(`models/${filename}`),
+    loader.loadAsync(`models/${smileFilename}`),
   ]);
 
   const extracted = extractIndexedVerts(baseFaceObj, smileFaceObj);

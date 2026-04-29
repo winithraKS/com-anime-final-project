@@ -59,7 +59,7 @@ async function loadModel(filename: string) {
   if (originalMesh) scene.remove(originalMesh);
   if (simplifiedMesh) scene.remove(simplifiedMesh);
 
-  const result = await createComparisonMeshes(`ksHead/${filename}`);
+  const result = await createComparisonMeshes(`models/${filename}`);
   originalMesh = result.originalMesh;
   simplifiedMesh = result.simplifiedMesh;
   faceGeo = result.faceGeo;
@@ -70,8 +70,8 @@ async function loadModel(filename: string) {
   origFaces = null;
   kdTree = undefined;
   if (filename === "flame_base.obj") {
-    const smileGroup = await loader.loadAsync("ksHead/flame_smile.obj");
-    const neutralGroup = await loader.loadAsync("ksHead/flame_base.obj");
+    const smileGroup = await loader.loadAsync("models/flame_smile.obj");
+    const neutralGroup = await loader.loadAsync("models/flame_base.obj");
     const extracted = extractIndexedVerts(neutralGroup, smileGroup);
     origNeutral = extracted.origNeutral;
     origSmile = extracted.origSmile;
@@ -171,10 +171,21 @@ if (slider && ratioValueDisplay && applyBtn && statusDisplay) {
 
     // Use timeout to allow UI update
     setTimeout(() => {
+      const isKSHead = modelSelect.value === "ksHeadNormal.obj";
+
       // SimplifyModifier
-      const start1 = performance.now();
-      const newGeo = simplifyGeometry(faceGeo, 1 - ratio);
-      const end1 = performance.now();
+      let newGeo: THREE.BufferGeometry;
+      let start1 = 0,
+        end1 = 0;
+
+      if (isKSHead) {
+        newGeo = faceGeo.clone();
+        console.log("Skipping SimplifyModifier for ksHeadNormal.obj");
+      } else {
+        start1 = performance.now();
+        newGeo = simplifyGeometry(faceGeo, 1 - ratio);
+        end1 = performance.now();
+      }
 
       simplifiedMesh.geometry.dispose();
       simplifiedMesh.geometry = newGeo;
@@ -255,6 +266,10 @@ if (slider && ratioValueDisplay && applyBtn && statusDisplay) {
       originalMesh.geometry = qemGeo;
 
       applyBtn.disabled = false;
+
+      const simpTimeStr = isKSHead ? "Skipped" : `${(end1 - start1).toFixed(0)}ms`;
+      const simpVertsStr = newGeo.attributes.position.count;
+
       statusDisplay.innerHTML = `
         <div>
           <div class="status-title qem-color">QEM</div>
@@ -262,7 +277,7 @@ if (slider && ratioValueDisplay && applyBtn && statusDisplay) {
         </div>
         <div class="status-divider">
           <div class="status-title simp-color">Simplify Modifier</div>
-          <div class="status-data">Time: ${(end1 - start1).toFixed(0)}ms · Verts: ${newGeo.attributes.position.count}</div>
+          <div class="status-data">Time: ${simpTimeStr} · Verts: ${simpVertsStr}</div>
         </div>
       `;
     }, 50);

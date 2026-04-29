@@ -1,542 +1,199 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-	<meta charset="UTF-8"/>
-	<meta name="viewport" content="width=device-width, initial-scale=1.0"/>
-	<title>QEM Benchmark</title>
-	<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
-	<link rel="stylesheet" href="src/benchmark.css"/>
+  <meta charset="UTF-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>Mesh Simplification Benchmark</title>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
+  <link rel="stylesheet" href="src/benchmark.css" />
 </head>
-<body>
+<body class="benchmark-page">
+	<div class="container">
+		<div class="header-container">
+			<header class="benchmark-header">
+				<h1>Algorithmic Benchmark</h1>
+				<p>QEM (Proposed) vs SimplifyModifier (Three.js Baseline)</p>
+			</header>
 
-<header>
-  <h1>Simplification Benchmark</h1>
-  <p>QEM (custom) vs SimplifyModifier (Three.js) · Computer Animation Project</p>
-</header>
+			<div class="benchmark-nav">
+				<button onclick="window.location.href = 'index.html'">Interactive Demo</button>
+				<button onclick="window.location.href = 'benchmark.html'" class="active-nav">Benchmark Results</button>
+			</div>
+		</div>
 
-<div id="page-controls">
-    <button onclick="window.location.href = 'index.html'">
-    FPS Benchmark
-    </button>
-    <button onclick="window.location.href = 'comparison.html'">
-    Comparison Test
-    </button>
-    <button onclick="window.location.href = 'benchmark.html'">
-    Benchmark Results
-    </button>
-</div>
+		<section class="card config-card">
+			<div class="config-grid">
+				<div class="config-group">
+					<label for="model-select">Select Dataset</label>
+					<select id="model-select" class="benchmark-input">
+						<option value="flame_base.obj">flame_base.obj (~10k faces)</option>
+						<option value="bunny30k.obj" selected>bunny30k.obj (~70k faces)</option>
+						<option value="ksHeadNormal.obj">ksHeadNormal.obj (~300k faces)</option>
+					</select>
+				</div>
+				<div class="config-group-small">
+					<label for="repeats">Test Iterations</label>
+					<select id="repeats" class="benchmark-input">
+						<option value="1">1x (Quick)</option>
+						<option value="3" selected>3x (Stable)</option>
+						<option value="5">5x (Precision)</option>
+					</select>
+				</div>
+				<button id="run-btn" class="primary-btn">Run Full Test Suite</button>
+			</div>
+			
+			<div id="status-bar" class="status-bar">
+				<span id="status-text">Ready to benchmark.</span>
+			</div>
+		</section>
 
-<div class="controls">
-  <div class="ctrl-group">
-    <label for="objFile">OBJ File</label>
-    <input type="file" id="objFile" accept=".obj"/>
-  </div>
-  <div class="ctrl-group">
-    <label for="ratioPreset">Ratios to test</label>
-    <select id="ratioPreset">
-      <option value="5">5 points (10%→90%)</option>
-      <option value="7" selected>7 points (5%→100%)</option>
-      <option value="custom">Custom</option>
-    </select>
-  </div>
-  <div class="ctrl-group">
-    <label for="repeats">Repeats per ratio</label>
-    <select id="repeats">
-      <option value="1">1×</option>
-      <option value="3" selected>3×</option>
-      <option value="5">5×</option>
-    </select>
-  </div>
-  <button id="runBtn" disabled>Load OBJ first</button>
-</div>
+		<div class="charts-grid">
+			<article class="card chart-card">
+				<h3>Runtime Performance (ms)</h3>
+				<canvas id="timeChart"></canvas>
+			</article>
+			<article class="card chart-card">
+				<h3>Reduction Speedup (%)</h3>
+				<canvas id="speedupChart"></canvas>
+			</article>
+		</div>
 
-<div id="progressTrack"><div id="progressBar"></div></div>
-<div id="statusBar">— load an OBJ file to begin —</div>
+		<section class="card table-card">
+			<h3>Detailed Results Table</h3>
+			<table id="results-table">
+				<thead>
+					<tr>
+						<th>Target Ratio</th>
+						<th>QEM Time (Avg)</th>
+						<th>Baseline Time (Avg)</th>
+						<th>Output Faces</th>
+						<th>Comparison</th>
+					</tr>
+				</thead>
+				<tbody>
+					<tr><td colspan="5" class="empty-state">Execute benchmark to populate data</td></tr>
+				</tbody>
+			</table>
+		</section>
+	</div>
 
-<!-- Summary stats -->
-<div class="stats-row">
-  <div class="stat-card">
-    <div class="label">Original Faces</div>
-    <div class="value purple" id="statOrigFaces">—</div>
-  </div>
-  <div class="stat-card">
-    <div class="label">QEM avg speedup</div>
-    <div class="value green" id="statSpeedup">—</div>
-  </div>
-  <div class="stat-card">
-    <div class="label">Best QEM time</div>
-    <div class="value purple" id="statBestQEM">—</div>
-  </div>
-  <div class="stat-card">
-    <div class="label">Best SM time</div>
-    <div class="value red" id="statBestSM">—</div>
-  </div>
-</div>
+	<script type="module">
+		import * as THREE from "three";
+		import { OBJLoader } from "three/addons/loaders/OBJLoader.js";
+		import * as BufferGeometryUtils from "three/examples/jsm/utils/BufferGeometryUtils.js";
+		
+		// นำเข้าฟังก์ชันจากไฟล์ที่คุณอัปโหลดมา
+		import { qemSimplify } from "./src/qem";
+		import { extractIndexedVerts } from "./src/geometry-utils";
+		import { simplifyGeometry } from "./src/simplifyModifier";
 
-<!-- Charts -->
-<div class="charts-grid">
-  <div class="chart-card">
-    <h3>Simplification Time vs Ratio</h3>
-    <p>lower is better · ms</p>
-    <canvas id="chartTime"></canvas>
-  </div>
-  <div class="chart-card">
-    <h3>Face Count vs Ratio</h3>
-    <p>actual output face count</p>
-    <canvas id="chartFaces"></canvas>
-  </div>
-  <div class="chart-card">
-    <h3>Speedup Factor (QEM vs SimplifyModifier)</h3>
-    <p>QEM time / SM time · below 1 = QEM faster</p>
-    <canvas id="chartSpeedup"></canvas>
-  </div>
-  <div class="chart-card">
-    <h3>Triangles Rendered vs Ratio</h3>
-    <p>renderer.info.render.triangles · 1000 instances</p>
-    <canvas id="chartTriangles"></canvas>
-  </div>
-</div>
+		const loader = new OBJLoader();
+		const runBtn = document.getElementById('run-btn');
+		const statusBar = document.getElementById('status-bar');
+		const statusText = document.getElementById('status-text');
+		
+		let charts = {};
 
-<!-- Data table -->
-<div class="table-card">
-  <h3>Raw Results</h3>
-  <table>
-    <thead>
-      <tr>
-        <th>Ratio</th>
-        <th>Method</th>
-        <th>Avg Time (ms)</th>
-        <th>Min Time (ms)</th>
-        <th>Output Faces</th>
-        <th>Output Verts</th>
-        <th>Speedup</th>
-      </tr>
-    </thead>
-    <tbody id="tableBody">
-      <tr><td colspan="7" style="color:var(--muted);text-align:center;padding:24px">Run benchmark to see results</td></tr>
-    </tbody>
-  </table>
-</div>
+		function initCharts(labels) {
+			if (charts.time) charts.time.destroy();
+			if (charts.speed) charts.speed.destroy();
 
-<p class="note">
-  <strong>Methodology:</strong> Simplification time is measured with <code>performance.now()</code> bracketing only the algorithm call, excluding Three.js geometry build and upload.
-  Each ratio is tested <em>N</em> times; the average and minimum are reported.
-  SimplifyModifier input is the vertex count equivalent of the face ratio.
-  <code>renderer.info.render.triangles</code> is sampled after one render call with 1000 instanced copies.
-</p>
+			charts.time = new Chart(document.getElementById('timeChart'), {
+				type: 'line',
+				data: {
+					labels: labels,
+					datasets: [
+						{ label: 'QEM (Proposed)', borderColor: '#7f77dd', data: [], tension: 0.2, fill: false },
+						{ label: 'SimplifyMod (Baseline)', borderColor: '#ff6584', data: [], borderDash: [5, 5], tension: 0.2 }
+					]
+				},
+				options: { responsive: true, scales: { y: { grid: { color: 'rgba(255,255,255,0.05)' } } } }
+			});
 
-<!-- ─────────────────────────────────────────────────────── -->
-<script type="module">
-// ─── Inline minimal QEM (same algorithm as main project) ───────────────────
+			charts.speed = new Chart(document.getElementById('speedupChart'), {
+				type: 'bar',
+				data: {
+					labels: labels,
+					datasets: [{ label: 'QEM Speed Advantage (%)', backgroundColor: 'rgba(67, 233, 123, 0.4)', borderColor: '#43e97b', borderWidth: 1, data: [] }]
+				},
+				options: { responsive: true }
+			});
+		}
 
-function parseOBJ(text) {
-  const verts = [], faces = [];
-  for (const line of text.split('\n')) {
-    const p = line.trim().split(/\s+/);
-    if (p[0] === 'v') verts.push(+p[1], +p[2], +p[3]);
-    else if (p[0] === 'f') {
-      const idx = p.slice(1).map(t => parseInt(t.split('/')[0]) - 1);
-      for (let i = 1; i < idx.length - 1; i++)
-        faces.push(idx[0], idx[i], idx[i+1]);
-    }
-  }
-  return { verts: new Float64Array(verts), faces: new Int32Array(faces) };
-}
+		runBtn.addEventListener('click', async () => {
+			runBtn.disabled = true;
+			statusBar.style.display = 'block';
+			const filename = document.getElementById('model-select').value;
+			const repeats = parseInt(document.getElementById('repeats').value);
+			const ratios = [0.1, 0.25, 0.5, 0.75, 0.9];
+			
+			statusText.textContent = `Loading ${filename}...`;
+			const group = await loader.loadAsync(`models/${filename}`);
+			
+			// เตรียมข้อมูลสำหรับ QEM
+			const extracted = extractIndexedVerts(group, group);
+			
+			// เตรียมข้อมูลสำหรับ Baseline
+			let baseGeo;
+			group.traverse(c => { 
+				if (c instanceof THREE.Mesh) {
+					c.geometry.deleteAttribute("normal");
+					c.geometry.deleteAttribute("uv");
+					baseGeo = BufferGeometryUtils.mergeVertices(c.geometry);
+				}
+			});
 
-// Weld duplicate vertices
-function weldMesh(verts, faces) {
-  const nRaw = verts.length / 3;
-  const map = new Map();
-  const uv = [];
-  const idx = new Int32Array(nRaw);
-  let n = 0;
-  for (let i = 0; i < nRaw; i++) {
-    const x = verts[i*3], y = verts[i*3+1], z = verts[i*3+2];
-    const key = `${Math.round(x*1e4)}_${Math.round(y*1e4)}_${Math.round(z*1e4)}`;
-    if (map.has(key)) { idx[i] = map.get(key); }
-    else { map.set(key, n); idx[i] = n; uv.push(x,y,z); n++; }
-  }
-  const wf = new Int32Array(faces.length);
-  for (let i = 0; i < faces.length; i++) wf[i] = idx[faces[i]];
-  return { verts: new Float64Array(uv), faces: wf };
-}
+			initCharts(ratios.map(r => (r * 100) + '%'));
+			const tableBody = document.querySelector('#results-table tbody');
+			tableBody.innerHTML = '';
 
-function computeQuadrics(verts, faces, nV) {
-  const Q = new Float64Array(nV * 16);
-  for (let fi = 0; fi < faces.length/3; fi++) {
-    const i0=faces[fi*3],i1=faces[fi*3+1],i2=faces[fi*3+2];
-    const ax=verts[i0*3],ay=verts[i0*3+1],az=verts[i0*3+2];
-    const bx=verts[i1*3],by=verts[i1*3+1],bz=verts[i1*3+2];
-    const cx=verts[i2*3],cy=verts[i2*3+1],cz=verts[i2*3+2];
-    let nx=(by-ay)*(cz-az)-(bz-az)*(cy-ay);
-    let ny=(bz-az)*(cx-ax)-(bx-ax)*(cz-az);
-    let nz=(bx-ax)*(cy-ay)-(by-ay)*(cx-ax);
-    const len=Math.sqrt(nx*nx+ny*ny+nz*nz);
-    if(len<1e-12)continue;
-    nx/=len;ny/=len;nz/=len;
-    const d=-(nx*ax+ny*ay+nz*az);
-    const p=[nx,ny,nz,d];
-    for(const vi of[i0,i1,i2]){
-      const b=vi*16;
-      for(let r=0;r<4;r++) for(let c=0;c<4;c++) Q[b+r*4+c]+=p[r]*p[c];
-    }
-  }
-  return Q;
-}
+			for (const ratio of ratios) {
+				statusText.textContent = `Benchmarking Ratio: ${ratio * 100}%...`;
+				
+				let qemTotal = 0;
+				let smTotal = 0;
+				let lastResult;
 
-const _Qc = new Float64Array(16);
-function edgeCostAndPos(Q, pos, vi, vj) {
-  for(let k=0;k<16;k++) _Qc[k]=Q[vi*16+k]+Q[vj*16+k];
-  const vix=pos[vi*3],viy=pos[vi*3+1],viz=pos[vi*3+2];
-  const vjx=pos[vj*3],vjy=pos[vj*3+1],vjz=pos[vj*3+2];
-  const cands=[[vix,viy,viz],[vjx,vjy,vjz],[(vix+vjx)/2,(viy+vjy)/2,(viz+vjz)/2]];
-  // solve
-  const A=[_Qc[0],_Qc[1],_Qc[2],_Qc[4],_Qc[5],_Qc[6],_Qc[8],_Qc[9],_Qc[10]];
-  const b=[-_Qc[3],-_Qc[7],-_Qc[11]], sol=[0,0,0];
-  const M=[[A[0],A[1],A[2],b[0]],[A[3],A[4],A[5],b[1]],[A[6],A[7],A[8],b[2]]];
-  let ok=true;
-  for(let col=0;col<3;col++){
-    let mv=Math.abs(M[col][col]),mr=col;
-    for(let r=col+1;r<3;r++) if(Math.abs(M[r][col])>mv){mv=Math.abs(M[r][col]);mr=r;}
-    if(mv<1e-10){ok=false;break;}
-    [M[col],M[mr]]=[M[mr],M[col]];
-    const inv=1/M[col][col];
-    for(let r=col+1;r<3;r++){const f=M[r][col]*inv;for(let k=col;k<=3;k++)M[r][k]-=f*M[col][k];}
-  }
-  if(ok){
-    for(let r=2;r>=0;r--){let s=M[r][3];for(let k=r+1;k<3;k++)s-=M[r][k]*sol[k];sol[r]=s/M[r][r];}
-    const el2=(vjx-vix)**2+(vjy-viy)**2+(vjz-viz)**2;
-    const dx=sol[0]-vix,dy=sol[1]-viy,dz=sol[2]-viz;
-    if(dx*dx+dy*dy+dz*dz<=el2*2.25) cands.push([...sol]);
-  }
-  let best=cands[0],bc=Infinity;
-  for(const c of cands){
-    const v=[c[0],c[1],c[2],1];let cost=0;
-    for(let r=0;r<4;r++){let row=0;for(let cc=0;cc<4;cc++)row+=_Qc[r*4+cc]*v[cc];cost+=row*v[r];}
-    if(cost<bc){bc=cost;best=c;}
-  }
-  return{cost:bc,opt:best};
-}
+				for (let i = 0; i < repeats; i++) {
+					// Test Proposed QEM
+					const t0 = performance.now();
+					lastResult = qemSimplify(new Float64Array(extracted.origNeutral), new Int32Array(extracted.origFaces), ratio);
+					qemTotal += (performance.now() - t0);
 
-function qemSimplify(vertsIn, facesIn, ratio) {
-  const nV=vertsIn.length/3, nF=facesIn.length/3;
-  const target=Math.max(1,Math.floor(nF*ratio));
-  const pos=new Float64Array(vertsIn);
-  const Q=computeQuadrics(pos,facesIn,nV);
-  const parent=Int32Array.from({length:nV},(_,i)=>i);
-  function find(x){let r=x;while(parent[r]!==r)r=parent[r];while(parent[x]!==r){const nx=parent[x];parent[x]=r;x=nx;}return r;}
-  function union(k,rm,nx,ny,nz){parent[rm]=k;pos[k*3]=nx;pos[k*3+1]=ny;pos[k*3+2]=nz;for(let i=0;i<16;i++)Q[k*16+i]+=Q[rm*16+i];}
-  const faces=new Int32Array(facesIn);
-  const alive=new Uint8Array(nF).fill(1);
-  let nFaces=nF;
-  const vf=Array.from({length:nV},()=>new Set());
-  for(let fi=0;fi<nF;fi++){vf[faces[fi*3]].add(fi);vf[faces[fi*3+1]].add(fi);vf[faces[fi*3+2]].add(fi);}
-  const seen=new Set();
-  function ek(u,v){return u<v?(BigInt(u)<<32n)|BigInt(v):(BigInt(v)<<32n)|BigInt(u);}
-  // Simple array-based min heap
-  const hk=[],hvi=[],hvj=[];
-  function hpush(k,vi,vj){
-    hk.push(k);hvi.push(vi);hvj.push(vj);
-    let i=hk.length-1;
-    while(i>0){const p=(i-1)>>1;if(hk[p]<=hk[i])break;
-      [hk[p],hk[i]]=[hk[i],hk[p]];[hvi[p],hvi[i]]=[hvi[i],hvi[p]];[hvj[p],hvj[i]]=[hvj[i],hvj[p]];i=p;}
-  }
-  function hpop(){
-    if(!hk.length)return null;
-    const k=hk[0],vi=hvi[0],vj=hvj[0];
-    const last=hk.length-1;
-    hk[0]=hk[last];hvi[0]=hvi[last];hvj[0]=hvj[last];
-    hk.pop();hvi.pop();hvj.pop();
-    let i=0;
-    while(true){let s=i;const l=2*i+1,r=2*i+2;
-      if(l<hk.length&&hk[l]<hk[s])s=l;if(r<hk.length&&hk[r]<hk[s])s=r;
-      if(s===i)break;
-      [hk[s],hk[i]]=[hk[i],hk[s]];[hvi[s],hvi[i]]=[hvi[i],hvi[s]];[hvj[s],hvj[i]]=[hvj[i],hvj[s]];i=s;}
-    return{k,vi,vj};
-  }
-  function push(vi,vj){
-    vi=find(vi);vj=find(vj);if(vi===vj)return;
-    const key=ek(vi,vj);if(seen.has(key))return;
-    seen.add(key);
-    const{cost}=edgeCostAndPos(Q,pos,vi,vj);
-    hpush(cost,vi,vj);
-  }
-  for(let fi=0;fi<nF;fi++){push(faces[fi*3],faces[fi*3+1]);push(faces[fi*3+1],faces[fi*3+2]);push(faces[fi*3],faces[fi*3+2]);}
-  while(nFaces>target&&hk.length>0){
-    const item=hpop();if(!item)break;
-    const vi=find(item.vi),vj=find(item.vj);
-    if(vi===vj)continue;
-    const{opt}=edgeCostAndPos(Q,pos,vi,vj);
-    union(vi,vj,opt[0],opt[1],opt[2]);
-    const nb=new Set();
-    for(const fi of vf[vj]){
-      if(!alive[fi])continue;
-      const c0=find(faces[fi*3]),c1=find(faces[fi*3+1]),c2=find(faces[fi*3+2]);
-      faces[fi*3]=c0;faces[fi*3+1]=c1;faces[fi*3+2]=c2;
-      if(c0===c1||c1===c2||c0===c2){alive[fi]=0;nFaces--;for(const c of[c0,c1,c2])vf[c].delete(fi);}
-      else{vf[vi].add(fi);nb.add(c0);nb.add(c1);nb.add(c2);}
-    }
-    vf[vj].clear();
-    for(const fi of vf[vi]){if(!alive[fi])continue;for(let k=0;k<3;k++){const r=find(faces[fi*3+k]);faces[fi*3+k]=r;if(r!==vi)nb.add(r);}}
-    nb.delete(vi);
-    for(const n of nb){const rn=find(n);if(rn!==vi){seen.delete(ek(vi,rn));push(vi,rn);}}
-  }
-  const vfl=[];
-  for(let fi=0;fi<nF;fi++){if(!alive[fi])continue;const a=find(faces[fi*3]),b=find(faces[fi*3+1]),c=find(faces[fi*3+2]);if(a!==b&&b!==c&&a!==c)vfl.push(a,b,c);}
-  const ur=[...new Set(vfl)].sort((a,b)=>a-b);
-  const r2c=new Map();ur.forEach((r,i)=>r2c.set(r,i));
-  const cv=new Float32Array(ur.length*3);
-  for(let i=0;i<ur.length;i++){const r=ur[i];cv[i*3]=pos[r*3];cv[i*3+1]=pos[r*3+1];cv[i*3+2]=pos[r*3+2];}
-  const cf=new Uint32Array(vfl.length);
-  for(let i=0;i<vfl.length;i++)cf[i]=r2c.get(vfl[i]);
-  return{verts:cv,faces:cf,nFaces:vfl.length/3,nVerts:ur.length};
-}
+					// Test Baseline
+					const t1 = performance.now();
+					simplifyGeometry(baseGeo, 1 - ratio); // SimplifyModifier takes removal ratio
+					smTotal += (performance.now() - t1);
+				}
 
-// ─── SimplifyModifier (Three.js) ────────────────────────────────────────────
-// Inline a simple vertex-clustering simplifier as "SimplifyModifier baseline"
-// This matches what Three.js SimplifyModifier does conceptually:
-// sort edges by length, collapse shortest first (no quadric error)
-function naiveSimplify(vertsIn, facesIn, ratio) {
-  const nV=vertsIn.length/3, nF=facesIn.length/3;
-  const target=Math.max(1,Math.floor(nF*ratio));
-  const pos=new Float64Array(vertsIn);
-  const parent=Int32Array.from({length:nV},(_,i)=>i);
-  function find(x){while(parent[x]!==x)x=parent[x]=parent[parent[x]];return x;}
-  const faces=new Int32Array(facesIn);
-  const alive=new Uint8Array(nF).fill(1);
-  let nFaces=nF;
-  // Collect all edges sorted by length
-  const edges=[];
-  const seen=new Set();
-  for(let fi=0;fi<nF;fi++){
-    const a=faces[fi*3],b=faces[fi*3+1],c=faces[fi*3+2];
-    for(const[u,v] of [[a,b],[b,c],[a,c]]){
-      const key=u<v?u*nV+v:v*nV+u; // ok for baseline (smaller mesh or demo)
-      if(seen.has(key))continue; seen.add(key);
-      const dx=pos[u*3]-pos[v*3],dy=pos[u*3+1]-pos[v*3+1],dz=pos[u*3+2]-pos[v*3+2];
-      edges.push({len:dx*dx+dy*dy+dz*dz,u,v});
-    }
-  }
-  edges.sort((a,b)=>a.len-b.len);
-  for(const{u,v} of edges){
-    if(nFaces<=target)break;
-    const ru=find(u),rv=find(v);
-    if(ru===rv)continue;
-    parent[rv]=ru;
-    pos[ru*3]=(pos[ru*3]+pos[rv*3])/2;
-    pos[ru*3+1]=(pos[ru*3+1]+pos[rv*3+1])/2;
-    pos[ru*3+2]=(pos[ru*3+2]+pos[rv*3+2])/2;
-    for(let fi=0;fi<nF;fi++){
-      if(!alive[fi])continue;
-      for(let k=0;k<3;k++)faces[fi*3+k]=find(faces[fi*3+k]);
-      const a=faces[fi*3],b2=faces[fi*3+1],c=faces[fi*3+2];
-      if(a===b2||b2===c||a===c){alive[fi]=0;nFaces--;}
-    }
-  }
-  const vfl=[];
-  for(let fi=0;fi<nF;fi++){if(!alive[fi])continue;const a=find(faces[fi*3]),b=find(faces[fi*3+1]),c=find(faces[fi*3+2]);if(a!==b&&b!==c&&a!==c)vfl.push(a,b,c);}
-  const ur=[...new Set(vfl)].sort((a,b)=>a-b);
-  const r2c=new Map();ur.forEach((r,i)=>r2c.set(r,i));
-  const cv=new Float32Array(ur.length*3);
-  for(let i=0;i<ur.length;i++){const r=ur[i];cv[i*3]=pos[r*3];cv[i*3+1]=pos[r*3+1];cv[i*3+2]=pos[r*3+2];}
-  return{nFaces:vfl.length/3,nVerts:ur.length};
-}
+				const qemAvg = qemTotal / repeats;
+				const smAvg = smTotal / repeats;
+				const speedup = ((smAvg - qemAvg) / smAvg) * 100;
 
-// ─── Chart setup ────────────────────────────────────────────────────────────
-const chartDefaults = {
-  responsive: true,
-  interaction: { mode: 'index', intersect: false },
-  plugins: {
-    legend: { labels: { color: '#9090aa', font: { family: 'JetBrains Mono', size: 11 } } },
-    tooltip: { backgroundColor: '#111118', borderColor: '#1e1e2e', borderWidth: 1,
-      titleColor: '#fff', bodyColor: '#9090aa', padding: 10 }
-  },
-  scales: {
-    x: { ticks: { color: '#5a5a72', font: { family: 'JetBrains Mono', size: 10 } }, grid: { color: 'rgba(255,255,255,0.04)' } },
-    y: { ticks: { color: '#5a5a72', font: { family: 'JetBrains Mono', size: 10 } }, grid: { color: 'rgba(255,255,255,0.04)' } }
-  }
-};
+				// Update Charts
+				charts.time.data.datasets[0].data.push(qemAvg);
+				charts.time.data.datasets[1].data.push(smAvg);
+				charts.speed.data.datasets[0].data.push(speedup);
+				charts.time.update();
+				charts.speed.update();
 
-function makeChart(id, type, labels, datasets, yLabel='') {
-  const ctx = document.getElementById(id).getContext('2d');
-  return new Chart(ctx, {
-    type,
-    data: { labels, datasets },
-    options: {
-      ...chartDefaults,
-      scales: {
-        ...chartDefaults.scales,
-        y: { ...chartDefaults.scales.y, title: { display: !!yLabel, text: yLabel, color: '#5a5a72', font: { family: 'JetBrains Mono', size: 10 } } }
-      }
-    }
-  });
-}
+				// Update Table
+				const row = `<tr>
+					<td>${ratio * 100}%</td>
+					<td style="color:#7f77dd">${qemAvg.toFixed(2)} ms</td>
+					<td style="color:#ff6584">${smAvg.toFixed(2)} ms</td>
+					<td>${(lastResult.faces.length / 3).toLocaleString()}</td>
+					<td style="color:${speedup > 0 ? '#43e97b' : '#ff6584'}">
+						${speedup > 0 ? '🚀 ' + speedup.toFixed(1) + '% Faster' : speedup.toFixed(1) + '% Slower'}
+					</td>
+				</tr>`;
+				tableBody.innerHTML += row;
+			}
 
-let charts = {};
-function initCharts(labels) {
-  for (const c of Object.values(charts)) c.destroy();
-  charts.time = makeChart('chartTime', 'line', labels, [
-    { label: 'QEM', data: [], borderColor: '#6c63ff', backgroundColor: 'rgba(108,99,255,0.1)', tension: 0.3, fill: true },
-    { label: 'Naive (Baseline)', data: [], borderColor: '#ff6584', backgroundColor: 'rgba(255,101,132,0.1)', tension: 0.3, fill: true }
-  ], 'ms');
-  charts.faces = makeChart('chartFaces', 'bar', labels, [
-    { label: 'QEM faces', data: [], backgroundColor: 'rgba(108,99,255,0.6)' },
-    { label: 'Naive faces', data: [], backgroundColor: 'rgba(255,101,132,0.4)' }
-  ], 'faces');
-  charts.speedup = makeChart('chartSpeedup', 'line', labels, [
-    { label: 'QEM / Naive time ratio', data: [], borderColor: '#43e97b', backgroundColor: 'rgba(67,233,123,0.1)', tension: 0.3, fill: true,
-      borderDash: [], pointRadius: 4 },
-    { label: 'Break-even (1.0)', data: [], borderColor: '#5a5a72', borderDash: [4,4], pointRadius: 0 }
-  ], 'ratio (< 1 = QEM faster)');
-  charts.triangles = makeChart('chartTriangles', 'line', labels, [
-    { label: 'QEM triangles', data: [], borderColor: '#6c63ff', backgroundColor: 'rgba(108,99,255,0.1)', tension: 0.3, fill: true },
-    { label: 'Naive triangles', data: [], borderColor: '#ff6584', backgroundColor: 'rgba(255,101,132,0.1)', tension: 0.3, fill: true }
-  ], 'triangles');
-}
+			statusText.textContent = "Benchmark Completed Successfully.";
+			runBtn.disabled = false;
+		});
+	</script>
 
-// ─── State ───────────────────────────────────────────────────────────────────
-let meshData = null;
-
-document.getElementById('objFile').addEventListener('change', async e => {
-  const file = e.target.files[0];
-  if (!file) return;
-  setStatus('Parsing OBJ…');
-  const text = await file.text();
-  const raw = parseOBJ(text);
-  meshData = weldMesh(raw.verts, raw.faces);
-  document.getElementById('statOrigFaces').textContent =
-    (meshData.faces.length / 3).toLocaleString();
-  document.getElementById('runBtn').textContent = 'Run Benchmark';
-  document.getElementById('runBtn').disabled = false;
-  setStatus(`Loaded: ${(meshData.verts.length/3).toLocaleString()} verts · ${(meshData.faces.length/3).toLocaleString()} faces`);
-});
-
-document.getElementById('runBtn').addEventListener('click', runBenchmark);
-
-function setStatus(msg) { document.getElementById('statusBar').textContent = msg; }
-function setProgress(f) { document.getElementById('progressBar').style.width = `${Math.round(f*100)}%`; }
-
-async function runBenchmark() {
-  if (!meshData) return;
-  const btn = document.getElementById('runBtn');
-  btn.disabled = true;
-  btn.textContent = 'Running…';
-
-  const preset = document.getElementById('ratioPreset').value;
-  const repeats = parseInt(document.getElementById('repeats').value);
-
-  const ratios = preset === '5'
-    ? [0.1, 0.2, 0.3, 0.5, 0.7, 0.9, 1.0]
-    : [0.05, 0.1, 0.2, 0.3, 0.5, 0.7, 1.0];
-
-  const labels = ratios.map(r => `${Math.round(r*100)}%`);
-  initCharts(labels);
-
-  const results = [];
-  const total = ratios.length * 2 * repeats;
-  let done = 0;
-
-  for (let ri = 0; ri < ratios.length; ri++) {
-    const ratio = ratios[ri];
-    setStatus(`Testing ratio ${Math.round(ratio*100)}%…`);
-
-    // QEM
-    const qemTimes = [];
-    let qemResult;
-    for (let r = 0; r < repeats; r++) {
-      await new Promise(res => setTimeout(res, 0)); // yield to UI
-      const t0 = performance.now();
-      qemResult = qemSimplify(
-        new Float64Array(meshData.verts),
-        new Int32Array(meshData.faces),
-        ratio
-      );
-      qemTimes.push(performance.now() - t0);
-      done++;
-      setProgress(done / total);
-    }
-
-    // Naive baseline
-    const naiveTimes = [];
-    let naiveResult;
-    for (let r = 0; r < repeats; r++) {
-      await new Promise(res => setTimeout(res, 0));
-      const t0 = performance.now();
-      naiveResult = naiveSimplify(
-        new Float64Array(meshData.verts),
-        new Int32Array(meshData.faces),
-        ratio
-      );
-      naiveTimes.push(performance.now() - t0);
-      done++;
-      setProgress(done / total);
-    }
-
-    const qemAvg = qemTimes.reduce((a,b)=>a+b,0) / qemTimes.length;
-    const qemMin = Math.min(...qemTimes);
-    const naiveAvg = naiveTimes.reduce((a,b)=>a+b,0) / naiveTimes.length;
-    const naiveMin = Math.min(...naiveTimes);
-    const speedup = qemAvg / naiveAvg;
-
-    results.push({ ratio, qemAvg, qemMin, naiveAvg, naiveMin, speedup,
-      qemFaces: qemResult.nFaces, qemVerts: qemResult.nVerts,
-      naiveFaces: naiveResult.nFaces, naiveVerts: naiveResult.nVerts });
-
-    // Update charts incrementally
-    charts.time.data.datasets[0].data.push(+qemAvg.toFixed(1));
-    charts.time.data.datasets[1].data.push(+naiveAvg.toFixed(1));
-    charts.faces.data.datasets[0].data.push(qemResult.nFaces);
-    charts.faces.data.datasets[1].data.push(naiveResult.nFaces);
-    charts.speedup.data.datasets[0].data.push(+speedup.toFixed(3));
-    charts.speedup.data.datasets[1].data.push(1.0);
-    charts.triangles.data.datasets[0].data.push(qemResult.nFaces * 1000);
-    charts.triangles.data.datasets[1].data.push(naiveResult.nFaces * 1000);
-    for (const c of Object.values(charts)) c.update();
-  }
-
-  // Summary stats
-  const validSpeedups = results.filter(r => isFinite(r.speedup));
-  const avgSpeedup = validSpeedups.reduce((a,b)=>a+b.speedup,0) / validSpeedups.length;
-  const bestQEM = Math.min(...results.map(r=>r.qemMin));
-  const bestNaive = Math.min(...results.map(r=>r.naiveMin));
-  document.getElementById('statSpeedup').textContent =
-    avgSpeedup < 1 ? `${(1/avgSpeedup).toFixed(1)}× faster` : `${(1/avgSpeedup).toFixed(2)}× slower`;
-  document.getElementById('statBestQEM').textContent = `${bestQEM.toFixed(1)} ms`;
-  document.getElementById('statBestSM').textContent = `${bestNaive.toFixed(1)} ms`;
-
-  // Table
-  const tbody = document.getElementById('tableBody');
-  tbody.innerHTML = '';
-  for (const r of results) {
-    const speedupLabel = r.speedup < 1
-      ? `<span class="good">${(1/r.speedup).toFixed(2)}× faster</span>`
-      : `<span style="color:var(--accent2)">${r.speedup.toFixed(2)}× slower</span>`;
-
-    tbody.innerHTML += `
-      <tr>
-        <td class="highlight">${Math.round(r.ratio*100)}%</td>
-        <td><span class="badge badge-qem">QEM</span></td>
-        <td>${r.qemAvg.toFixed(1)}</td>
-        <td>${r.qemMin.toFixed(1)}</td>
-        <td>${r.qemFaces.toLocaleString()}</td>
-        <td>${r.qemVerts.toLocaleString()}</td>
-        <td rowspan="2" style="vertical-align:middle">${speedupLabel}</td>
-      </tr>
-      <tr>
-        <td></td>
-        <td><span class="badge badge-sm">Naive</span></td>
-        <td>${r.naiveAvg.toFixed(1)}</td>
-        <td>${r.naiveMin.toFixed(1)}</td>
-        <td>${r.naiveFaces.toLocaleString()}</td>
-        <td>${r.naiveVerts.toLocaleString()}</td>
-      </tr>`;
-  }
-
-  setProgress(1);
-  setStatus(`Done — ${results.length} ratios × ${repeats} repeats`);
-  btn.disabled = false;
-  btn.textContent = 'Run Again';
-}
-</script>
 </body>
 </html>

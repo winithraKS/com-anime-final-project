@@ -6,6 +6,7 @@ import {
   extractIndexedVerts,
   buildKDTree,
   kdNearest,
+  calculateVisualError,
   type KDNode,
 } from "./geometry-utils";
 import { OBJLoader } from "three/addons/loaders/OBJLoader.js";
@@ -81,6 +82,10 @@ async function loadModel(filename: string) {
     const nOrig = origNeutral.length / 3;
     const allIndices = Array.from({ length: nOrig }, (_, i) => i);
     kdTree = buildKDTree(allIndices, origNeutral);
+  } else {
+    // Keep origNeutral to compute visual error
+    const pos = faceGeo.attributes.position.array as Float32Array;
+    origNeutral = new Float64Array(pos);
   }
 
   // Dynamic scaling
@@ -134,7 +139,9 @@ if (toggleBtn) {
   });
 }
 
-const toggleShadingBtn = document.getElementById("toggle-shading-btn") as HTMLButtonElement;
+const toggleShadingBtn = document.getElementById(
+  "toggle-shading-btn",
+) as HTMLButtonElement;
 toggleShadingBtn.addEventListener("click", () => {
   const matOrig = originalMesh.material as THREE.MeshStandardMaterial;
   const matSimp = simplifiedMesh.material as THREE.MeshStandardMaterial;
@@ -142,7 +149,7 @@ toggleShadingBtn.addEventListener("click", () => {
   matOrig.flatShading = !matOrig.flatShading;
   matSimp.flatShading = !matSimp.flatShading;
 
-  // CRITICAL: You must set this to true for the shader to re-compile 
+  // CRITICAL: You must set this to true for the shader to re-compile
   // with the new shading logic.
   matOrig.needsUpdate = true;
   matSimp.needsUpdate = true;
@@ -271,6 +278,18 @@ if (slider && ratioValueDisplay && applyBtn && statusDisplay) {
 
       applyBtn.disabled = false;
 
+      // Calculate errors
+      let qemRmse = "N/A",
+        simpRmse = "N/A";
+      if (origNeutral) {
+        const simpPos = newGeo.attributes.position.array as Float32Array;
+        const sErr = calculateVisualError(origNeutral, simpPos);
+        simpRmse = sErr.rmse.toFixed(6);
+
+        const qErr = calculateVisualError(origNeutral, qemResult.vertices);
+        qemRmse = qErr.rmse.toFixed(6);
+      }
+
       // const simpTimeStr = isKSHead ? "Skipped" : `${(end1 - start1).toFixed(0)}ms`;
       const simpTimeStr = `${(end1 - start1).toFixed(0)}ms`;
       const simpVertsStr = newGeo.attributes.position.count;
@@ -278,11 +297,11 @@ if (slider && ratioValueDisplay && applyBtn && statusDisplay) {
       statusDisplay.innerHTML = `
         <div>
           <div class="status-title qem-color">QEM</div>
-          <div class="status-data">Time: ${(end2 - start2).toFixed(0)}ms · Verts: ${qemResult.vertices.length / 3}</div>
+          <div class="status-data">Time: ${(end2 - start2).toFixed(0)}ms · Verts: ${qemResult.vertices.length / 3} · RMSE: ${qemRmse}</div>
         </div>
         <div class="status-divider">
           <div class="status-title simp-color">Simplify Modifier</div>
-          <div class="status-data">Time: ${simpTimeStr} · Verts: ${simpVertsStr}</div>
+          <div class="status-data">Time: ${simpTimeStr} · Verts: ${simpVertsStr} · RMSE: ${simpRmse}</div>
         </div>
       `;
     }, 50);

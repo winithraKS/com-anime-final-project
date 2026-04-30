@@ -1,199 +1,275 @@
-<!DOCTYPE html>
+<!doctype html>
 <html lang="en">
-<head>
-  <meta charset="UTF-8"/>
-  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
-  <title>Mesh Simplification Benchmark</title>
-  <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
-  <link rel="stylesheet" href="src/benchmark.css" />
-</head>
-<body class="benchmark-page">
-	<div class="container">
-		<div class="header-container">
-			<header class="benchmark-header">
-				<h1>Algorithmic Benchmark</h1>
-				<p>QEM (Proposed) vs SimplifyModifier (Three.js Baseline)</p>
-			</header>
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Mesh Simplification Benchmark</title>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
+    <link rel="stylesheet" href="src/benchmark.css" />
+  </head>
+  <body class="benchmark-page">
+    <div class="container">
+      <div class="header-container">
+        <header class="benchmark-header">
+          <h1>Algorithmic Benchmark</h1>
+          <p>QEM (Proposed) vs SimplifyModifier (Three.js Baseline)</p>
+        </header>
 
-			<div class="benchmark-nav">
-				<button onclick="window.location.href = 'index.html'">Interactive Demo</button>
-				<button onclick="window.location.href = 'benchmark.html'" class="active-nav">Benchmark Results</button>
-			</div>
-		</div>
+        <div class="benchmark-nav">
+          <button onclick="window.location.href = 'index.html'">
+            Interactive Demo
+          </button>
+          <button
+            onclick="window.location.href = 'benchmark.html'"
+            class="active-nav"
+          >
+            Benchmark Results
+          </button>
+        </div>
+      </div>
 
-		<section class="card config-card">
-			<div class="config-grid">
-				<div class="config-group">
-					<label for="model-select">Select Dataset</label>
-					<select id="model-select" class="benchmark-input">
-						<option value="flame_base.obj">flame_base.obj (~10k faces)</option>
-						<option value="bunny30k.obj" selected>bunny30k.obj (~70k faces)</option>
-						<option value="ksHeadNormal.obj">ksHeadNormal.obj (~300k faces)</option>
-					</select>
-				</div>
-				<div class="config-group-small">
-					<label for="repeats">Test Iterations</label>
-					<select id="repeats" class="benchmark-input">
-						<option value="1">1x (Quick)</option>
-						<option value="3" selected>3x (Stable)</option>
-						<option value="5">5x (Precision)</option>
-					</select>
-				</div>
-				<button id="run-btn" class="primary-btn">Run Full Test Suite</button>
-			</div>
-			
-			<div id="status-bar" class="status-bar">
-				<span id="status-text">Ready to benchmark.</span>
-			</div>
-		</section>
+      <section class="card config-card">
+        <div class="config-grid">
+          <div class="config-group">
+            <label for="model-select">Select Dataset</label>
+            <select id="model-select" class="benchmark-input">
+              <option value="flame_base.obj">
+                flame_base.obj (~10k faces)
+              </option>
+              <option value="bunny30k.obj" selected>
+                bunny30k.obj (~70k faces)
+              </option>
+              <option value="ksHeadNormal.obj">
+                ksHeadNormal.obj (~300k faces)
+              </option>
+            </select>
+          </div>
+          <div class="config-group-small">
+            <label for="repeats">Test Iterations</label>
+            <select id="repeats" class="benchmark-input">
+              <option value="1">1x (Quick)</option>
+              <option value="3" selected>3x (Stable)</option>
+              <option value="5">5x (Precision)</option>
+            </select>
+          </div>
+          <button id="run-btn" class="primary-btn">Run Full Test Suite</button>
+        </div>
 
-		<div class="charts-grid">
-			<article class="card chart-card">
-				<h3>Runtime Performance (ms)</h3>
-				<canvas id="timeChart"></canvas>
-			</article>
-			<article class="card chart-card">
-				<h3>Reduction Speedup (%)</h3>
-				<canvas id="speedupChart"></canvas>
-			</article>
-		</div>
+        <div id="status-bar" class="status-bar">
+          <span id="status-text">Ready to benchmark.</span>
+        </div>
+      </section>
 
-		<section class="card table-card">
-			<h3>Detailed Results Table</h3>
-			<table id="results-table">
-				<thead>
-					<tr>
-						<th>Target Ratio</th>
-						<th>QEM Time (Avg)</th>
-						<th>Baseline Time (Avg)</th>
-						<th>Output Faces</th>
-						<th>Comparison</th>
-					</tr>
-				</thead>
-				<tbody>
-					<tr><td colspan="5" class="empty-state">Execute benchmark to populate data</td></tr>
-				</tbody>
-			</table>
-		</section>
-	</div>
+      <div class="charts-grid">
+        <article class="card chart-card">
+          <h3>Runtime Performance (ms)</h3>
+          <canvas id="timeChart"></canvas>
+        </article>
+        <article class="card chart-card">
+          <h3>Geometric RMSE Error</h3>
+          <canvas id="errorChart"></canvas>
+        </article>
+      </div>
 
-	<script type="module">
-		import * as THREE from "three";
-		import { OBJLoader } from "three/addons/loaders/OBJLoader.js";
-		import * as BufferGeometryUtils from "three/examples/jsm/utils/BufferGeometryUtils.js";
-		
-		// นำเข้าฟังก์ชันจากไฟล์ที่คุณอัปโหลดมา
-		import { qemSimplify } from "./src/qem";
-		import { extractIndexedVerts } from "./src/geometry-utils";
-		import { simplifyGeometry } from "./src/simplifyModifier";
+      <section class="card table-card">
+        <h3>Detailed Results Table</h3>
+        <table id="results-table">
+          <thead>
+            <tr>
+              <th>Target Ratio</th>
+              <th>QEM Time (Avg)</th>
+              <th>Baseline Time (Avg)</th>
+              <th>Output Faces</th>
+              <th>QEM RMSE</th>
+              <th>Baseline RMSE</th>
+              <th>Comparison</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td colspan="5" class="empty-state">
+                Execute benchmark to populate data
+              </td>
+            </tr>
+          </tbody>
+        </table>
+      </section>
+    </div>
 
-		const loader = new OBJLoader();
-		const runBtn = document.getElementById('run-btn');
-		const statusBar = document.getElementById('status-bar');
-		const statusText = document.getElementById('status-text');
-		
-		let charts = {};
+    <script type="module">
+      import * as THREE from "three";
+      import { OBJLoader } from "three/addons/loaders/OBJLoader.js";
+      import * as BufferGeometryUtils from "three/examples/jsm/utils/BufferGeometryUtils.js";
 
-		function initCharts(labels) {
-			if (charts.time) charts.time.destroy();
-			if (charts.speed) charts.speed.destroy();
+      // นำเข้าฟังก์ชันจากไฟล์ที่คุณอัปโหลดมา
+      import { qemSimplify } from "./src/qem";
+      import {
+        extractIndexedVerts,
+        buildKDTree,
+        calculateVisualError,
+      } from "./src/geometry-utils";
+      import { simplifyGeometry } from "./src/simplifyModifier";
 
-			charts.time = new Chart(document.getElementById('timeChart'), {
-				type: 'line',
-				data: {
-					labels: labels,
-					datasets: [
-						{ label: 'QEM (Proposed)', borderColor: '#7f77dd', data: [], tension: 0.2, fill: false },
-						{ label: 'SimplifyMod (Baseline)', borderColor: '#ff6584', data: [], borderDash: [5, 5], tension: 0.2 }
-					]
-				},
-				options: { responsive: true, scales: { y: { grid: { color: 'rgba(255,255,255,0.05)' } } } }
-			});
+      const loader = new OBJLoader();
+      const runBtn = document.getElementById("run-btn");
+      const statusBar = document.getElementById("status-bar");
+      const statusText = document.getElementById("status-text");
 
-			charts.speed = new Chart(document.getElementById('speedupChart'), {
-				type: 'bar',
-				data: {
-					labels: labels,
-					datasets: [{ label: 'QEM Speed Advantage (%)', backgroundColor: 'rgba(67, 233, 123, 0.4)', borderColor: '#43e97b', borderWidth: 1, data: [] }]
-				},
-				options: { responsive: true }
-			});
-		}
+      let charts = {};
 
-		runBtn.addEventListener('click', async () => {
-			runBtn.disabled = true;
-			statusBar.style.display = 'block';
-			const filename = document.getElementById('model-select').value;
-			const repeats = parseInt(document.getElementById('repeats').value);
-			const ratios = [0.1, 0.25, 0.5, 0.75, 0.9];
-			
-			statusText.textContent = `Loading ${filename}...`;
-			const group = await loader.loadAsync(`models/${filename}`);
-			
-			// เตรียมข้อมูลสำหรับ QEM
-			const extracted = extractIndexedVerts(group, group);
-			
-			// เตรียมข้อมูลสำหรับ Baseline
-			let baseGeo;
-			group.traverse(c => { 
-				if (c instanceof THREE.Mesh) {
-					c.geometry.deleteAttribute("normal");
-					c.geometry.deleteAttribute("uv");
-					baseGeo = BufferGeometryUtils.mergeVertices(c.geometry);
-				}
-			});
+      function initCharts(labels) {
+        if (charts.time) charts.time.destroy();
+        if (charts.error) charts.error.destroy();
 
-			initCharts(ratios.map(r => (r * 100) + '%'));
-			const tableBody = document.querySelector('#results-table tbody');
-			tableBody.innerHTML = '';
+        charts.time = new Chart(document.getElementById("timeChart"), {
+          type: "line",
+          data: {
+            labels: labels,
+            datasets: [
+              {
+                label: "QEM (Proposed)",
+                borderColor: "#7f77dd",
+                data: [],
+                tension: 0.2,
+                fill: false,
+              },
+              {
+                label: "SimplifyMod (Baseline)",
+                borderColor: "#ff6584",
+                data: [],
+                borderDash: [5, 5],
+                tension: 0.2,
+              },
+            ],
+          },
+          options: {
+            responsive: true,
+            scales: { y: { grid: { color: "rgba(255,255,255,0.05)" } } },
+          },
+        });
 
-			for (const ratio of ratios) {
-				statusText.textContent = `Benchmarking Ratio: ${ratio * 100}%...`;
-				
-				let qemTotal = 0;
-				let smTotal = 0;
-				let lastResult;
+        charts.error = new Chart(document.getElementById("errorChart"), {
+          type: "line",
+          data: {
+            labels: labels,
+            datasets: [
+              {
+                label: "QEM (Proposed)",
+                borderColor: "#7f77dd",
+                data: [],
+                tension: 0.2,
+                fill: false,
+              },
+              {
+                label: "SimplifyMod (Baseline)",
+                borderColor: "#ff6584",
+                data: [],
+                borderDash: [5, 5],
+                tension: 0.2,
+              },
+            ],
+          },
+          options: {
+            responsive: true,
+            scales: { y: { grid: { color: "rgba(255,255,255,0.05)" } } },
+          },
+        });
+      }
 
-				for (let i = 0; i < repeats; i++) {
-					// Test Proposed QEM
-					const t0 = performance.now();
-					lastResult = qemSimplify(new Float64Array(extracted.origNeutral), new Int32Array(extracted.origFaces), ratio);
-					qemTotal += (performance.now() - t0);
+      runBtn.addEventListener("click", async () => {
+        runBtn.disabled = true;
+        statusBar.style.display = "block";
+        const filename = document.getElementById("model-select").value;
+        const repeats = parseInt(document.getElementById("repeats").value);
+        const ratios = [0.1, 0.25, 0.5, 0.75, 0.9];
 
-					// Test Baseline
-					const t1 = performance.now();
-					simplifyGeometry(baseGeo, 1 - ratio); // SimplifyModifier takes removal ratio
-					smTotal += (performance.now() - t1);
-				}
+        statusText.textContent = `Loading ${filename}...`;
+        const group = await loader.loadAsync(`models/${filename}`);
 
-				const qemAvg = qemTotal / repeats;
-				const smAvg = smTotal / repeats;
-				const speedup = ((smAvg - qemAvg) / smAvg) * 100;
+        // เตรียมข้อมูลสำหรับ QEM
+        const extracted = extractIndexedVerts(group, group);
 
-				// Update Charts
-				charts.time.data.datasets[0].data.push(qemAvg);
-				charts.time.data.datasets[1].data.push(smAvg);
-				charts.speed.data.datasets[0].data.push(speedup);
-				charts.time.update();
-				charts.speed.update();
+        // เตรียมข้อมูลสำหรับ Baseline
+        let baseGeo;
+        group.traverse((c) => {
+          if (c instanceof THREE.Mesh) {
+            c.geometry.deleteAttribute("normal");
+            c.geometry.deleteAttribute("uv");
+            baseGeo = BufferGeometryUtils.mergeVertices(c.geometry);
+          }
+        });
 
-				// Update Table
-				const row = `<tr>
+        // Get original neutral to calculate visual error
+        const origNeutral = new Float64Array(extracted.origNeutral);
+
+        initCharts(ratios.map((r) => r * 100 + "%"));
+        const tableBody = document.querySelector("#results-table tbody");
+        tableBody.innerHTML = "";
+
+        for (const ratio of ratios) {
+          statusText.textContent = `Benchmarking Ratio: ${ratio * 100}%...`;
+
+          let qemTotal = 0;
+          let smTotal = 0;
+          let lastResult;
+          let lastSmGeo;
+
+          for (let i = 0; i < repeats; i++) {
+            // Test Proposed QEM
+            const t0 = performance.now();
+            lastResult = qemSimplify(
+              new Float64Array(extracted.origNeutral),
+              new Int32Array(extracted.origFaces),
+              ratio,
+            );
+            qemTotal += performance.now() - t0;
+
+            // Test Baseline
+            const t1 = performance.now();
+            lastSmGeo = simplifyGeometry(baseGeo, 1 - ratio); // SimplifyModifier takes removal ratio
+            smTotal += performance.now() - t1;
+          }
+
+          const qemAvg = qemTotal / repeats;
+          const smAvg = smTotal / repeats;
+          const speedup = ((smAvg - qemAvg) / smAvg) * 100;
+
+          const qErr = calculateVisualError(origNeutral, lastResult.vertices);
+          const sErr = calculateVisualError(
+            origNeutral,
+            lastSmGeo.attributes.position.array,
+          );
+          const qemRmseStr = qErr.rmse.toFixed(6);
+          const smRmseStr = sErr.rmse.toFixed(6);
+
+          const accuracy = ((sErr.rmse - qErr.rmse) / sErr.rmse) * 100;
+
+          // Update Charts
+          charts.time.data.datasets[0].data.push(qemAvg);
+          charts.time.data.datasets[1].data.push(smAvg);
+          charts.error.data.datasets[0].data.push(qErr.rmse);
+          charts.error.data.datasets[1].data.push(sErr.rmse);
+          charts.time.update();
+          charts.error.update();
+
+          // Update Table
+          const row = `<tr>
 					<td>${ratio * 100}%</td>
 					<td style="color:#7f77dd">${qemAvg.toFixed(2)} ms</td>
 					<td style="color:#ff6584">${smAvg.toFixed(2)} ms</td>
 					<td>${(lastResult.faces.length / 3).toLocaleString()}</td>
-					<td style="color:${speedup > 0 ? '#43e97b' : '#ff6584'}">
-						${speedup > 0 ? '🚀 ' + speedup.toFixed(1) + '% Faster' : speedup.toFixed(1) + '% Slower'}
+					<td style="color:#7f77dd">${qemRmseStr}</td>
+					<td style="color:#ff6584">${smRmseStr}</td>
+					<td style="color:${accuracy > 0 ? "#43e97b" : "#ff6584"}">
+						${accuracy > 0 ? accuracy.toFixed(1) + "% Better" : accuracy.toFixed(1) + "% Worse"}
 					</td>
 				</tr>`;
-				tableBody.innerHTML += row;
-			}
+          tableBody.innerHTML += row;
+        }
 
-			statusText.textContent = "Benchmark Completed Successfully.";
-			runBtn.disabled = false;
-		});
-	</script>
-
-</body>
+        statusText.textContent = "Benchmark Completed Successfully.";
+        runBtn.disabled = false;
+      });
+    </script>
+  </body>
 </html>

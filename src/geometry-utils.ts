@@ -4,7 +4,10 @@ import * as THREE from "three";
  * Extract indexed verts from OBJ and weld them based on position.
  * Returns neutral positions, smile positions, and face indices.
  */
-export function extractIndexedVerts(neutralObj: THREE.Group, smileObj: THREE.Group) {
+export function extractIndexedVerts(
+  neutralObj: THREE.Group,
+  smileObj: THREE.Group,
+) {
   const nMesh = neutralObj.children[0] as THREE.Mesh;
   const sMesh = smileObj.children[0] as THREE.Mesh;
 
@@ -66,7 +69,11 @@ export interface KDNode {
   right?: KDNode;
 }
 
-export function buildKDTree(indices: number[], verts: Float64Array, depth = 0): KDNode | undefined {
+export function buildKDTree(
+  indices: number[],
+  verts: Float64Array | Float32Array,
+  depth = 0,
+): KDNode | undefined {
   if (!indices.length) return undefined;
   const axis = depth % 3;
   indices.sort((a, b) => verts[a * 3 + axis] - verts[b * 3 + axis]);
@@ -81,11 +88,11 @@ export function buildKDTree(indices: number[], verts: Float64Array, depth = 0): 
 
 export function kdNearest(
   node: KDNode | undefined,
-  verts: Float64Array,
+  verts: Float64Array | Float32Array,
   qx: number,
   qy: number,
   qz: number,
-  best: { dist: number; idx: number }
+  best: { dist: number; idx: number },
 ) {
   if (!node) return;
   const px = verts[node.idx * 3],
@@ -101,4 +108,55 @@ export function kdNearest(
   const far = diff < 0 ? node.right : node.left;
   kdNearest(near, verts, qx, qy, qz, best);
   if (diff * diff < best.dist) kdNearest(far, verts, qx, qy, qz, best);
+}
+
+export function calculateVisualError(
+  origVerts: Float64Array | Float32Array,
+  simplifiedPos: Float32Array | Float64Array,
+) {
+  const nOrig = origVerts.length / 3;
+  const nSimp = simplifiedPos.length / 3;
+
+  // Build KD-trees for both meshes
+  const origIndices = Array.from({ length: nOrig }, (_, i) => i);
+  const simpIndices = Array.from({ length: nSimp }, (_, i) => i);
+  const kdOrig = buildKDTree(origIndices, origVerts);
+  const kdSimp = buildKDTree(simpIndices, simplifiedPos);
+
+  // Original → Simplified
+  let sumSq = 0;
+  let maxOrig2Simp = 0;
+  for (let i = 0; i < nOrig; i++) {
+    const best = { dist: Infinity, idx: 0 };
+    kdNearest(
+      kdSimp,
+      simplifiedPos,
+      origVerts[i * 3],
+      origVerts[i * 3 + 1],
+      origVerts[i * 3 + 2],
+      best,
+    );
+    sumSq += best.dist;
+    if (best.dist > maxOrig2Simp) maxOrig2Simp = best.dist;
+  }
+
+  // Simplified → Original
+  let maxSimp2Orig = 0;
+  for (let i = 0; i < nSimp; i++) {
+    const best = { dist: Infinity, idx: 0 };
+    kdNearest(
+      kdOrig,
+      origVerts,
+      simplifiedPos[i * 3],
+      simplifiedPos[i * 3 + 1],
+      simplifiedPos[i * 3 + 2],
+      best,
+    );
+    if (best.dist > maxSimp2Orig) maxSimp2Orig = best.dist;
+  }
+
+  return {
+    rmse: Math.sqrt(sumSq / nOrig),
+    hausdorff: Math.sqrt(Math.max(maxOrig2Simp, maxSimp2Orig)),
+  };
 }

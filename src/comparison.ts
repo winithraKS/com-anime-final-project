@@ -109,7 +109,7 @@ if (modelSelect) {
 }
 
 // Initial load
-await loadModel(modelSelect ? modelSelect.value : "bunny30k.obj");
+await loadModel(modelSelect ? modelSelect.value : "ksHeadNormal.obj");
 
 // 5. Controls
 const controls = new OrbitControls(camera, renderer.domElement);
@@ -134,6 +134,24 @@ if (toggleBtn) {
   });
 }
 
+const toggleShadingBtn = document.getElementById("toggle-shading-btn") as HTMLButtonElement;
+toggleShadingBtn.addEventListener("click", () => {
+  const matOrig = originalMesh.material as THREE.MeshStandardMaterial;
+  const matSimp = simplifiedMesh.material as THREE.MeshStandardMaterial;
+  // Toggle the boolean
+  matOrig.flatShading = !matOrig.flatShading;
+  matSimp.flatShading = !matSimp.flatShading;
+
+  // CRITICAL: You must set this to true for the shader to re-compile 
+  // with the new shading logic.
+  matOrig.needsUpdate = true;
+  matSimp.needsUpdate = true;
+
+  // Provide some feedback to the user
+  const mode = matOrig.flatShading ? "Flat" : "Smooth";
+  console.log(`Shading mode changed to: ${mode}`);
+});
+
 const slider = document.getElementById(
   "simplification-slider",
 ) as HTMLInputElement;
@@ -143,7 +161,7 @@ const statusDisplay = document.getElementById("status");
 
 if (slider && ratioValueDisplay && applyBtn && statusDisplay) {
   slider.addEventListener("input", () => {
-    ratioValueDisplay.textContent = slider.value;
+    ratioValueDisplay.textContent = `${slider.value}%`;
   });
 
   applyBtn.addEventListener("click", () => {
@@ -153,21 +171,25 @@ if (slider && ratioValueDisplay && applyBtn && statusDisplay) {
 
     // Use timeout to allow UI update
     setTimeout(() => {
-      const isKSHead = modelSelect.value === "ksHeadNormal.obj";
+      // const isKSHead = modelSelect.value === "ksHeadNormal.obj";
 
       // SimplifyModifier
       let newGeo: THREE.BufferGeometry;
       let start1 = 0,
         end1 = 0;
 
-      if (isKSHead) {
-        newGeo = faceGeo.clone();
-        console.log("Skipping SimplifyModifier for ksHeadNormal.obj");
-      } else {
-        start1 = performance.now();
-        newGeo = simplifyGeometry(faceGeo, 1 - ratio);
-        end1 = performance.now();
-      }
+      // if (isKSHead) {
+      //   newGeo = faceGeo.clone();
+      //   console.log("Skipping SimplifyModifier for ksHeadNormal.obj");
+      // } else {
+      //   start1 = performance.now();
+      //   newGeo = simplifyGeometry(faceGeo, 1 - ratio);
+      //   end1 = performance.now();
+      // }
+
+      start1 = performance.now();
+      newGeo = simplifyGeometry(faceGeo, 1 - ratio);
+      end1 = performance.now();
 
       simplifiedMesh.geometry.dispose();
       simplifiedMesh.geometry = newGeo;
@@ -249,7 +271,8 @@ if (slider && ratioValueDisplay && applyBtn && statusDisplay) {
 
       applyBtn.disabled = false;
 
-      const simpTimeStr = isKSHead ? "Skipped" : `${(end1 - start1).toFixed(0)}ms`;
+      // const simpTimeStr = isKSHead ? "Skipped" : `${(end1 - start1).toFixed(0)}ms`;
+      const simpTimeStr = `${(end1 - start1).toFixed(0)}ms`;
       const simpVertsStr = newGeo.attributes.position.count;
 
       statusDisplay.innerHTML = `

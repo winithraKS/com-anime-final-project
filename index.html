@@ -4,25 +4,37 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>Face QEM + Smile</title>
-    <link rel="stylesheet" href="style.css" />
+    <link rel="stylesheet" href="src/style.css" />
   </head>
   <body>
+    <div id="page-controls">
+      <button onclick="window.location.href = 'index.html'">
+        FPS Benchmark
+      </button>
+      <button onclick="window.location.href = 'comparison.html'">
+        Comparison Test
+      </button>
+      <button onclick="window.location.href = 'benchmark.html'">
+        Benchmark Results
+      </button>
+    </div>
     <!-- Control panel -->
     <div id="panel">
       <h2>FPS benchmark</h2>
 
-      <label>
+      <label for="model-select">
         Model
         <select id="model-select">
           <option value="flame_base.obj">flame_base.obj</option>
-          <option value="bunny30k.obj" selected>bunny30k.obj</option>
-          <option value="ksHeadNormal.obj">ksHeadNormal.obj</option>
+          <option value="bunny30k.obj">bunny30k.obj</option>
+          <option value="ksHeadNormal.obj" selected>ksHeadNormal.obj</option>
         </select>
       </label>
 
+      <button id="toggle-shading-btn">Toggle Smooth/Flat Shading</button>
       <hr />
 
-      <label>
+      <label for="ratio-slider">
         Simplification ratio
         <span id="ratio-display" class="value">100%</span>
       </label>
@@ -44,30 +56,29 @@
 
       <hr />
 
-      <label>
-        Smile
-        <span id="morph-display" class="value">0%</span>
-      </label>
-      <input
-        id="morph-slider"
-        type="range"
-        min="0"
-        max="100"
-        value="0"
-        step="1"
-      />
-      <p class="hint">Drag to blend between neutral and smile.</p>
+      <div id="morph-controls">
+        <label for="morph-slider">
+          Smile
+          <span id="morph-display" class="value">0%</span>
+        </label>
+        <input
+          id="morph-slider"
+          type="range"
+          min="0"
+          max="100"
+          value="0"
+          step="1"
+        />
+        <p class="hint">Drag to blend between neutral and smile.</p>
+      </div>
 
       <hr />
-      <button
-        id="switch-btn"
-        onclick="window.location.href = 'comparison.html'"
-      >
+      <!-- <button id="switch-btn" onclick="window.location.href = 'comparison.html'">
         Switch to Comparison Test
-      </button>
+      </button> -->
     </div>
     <p id="status">Loading…</p>
-    <canvas id="bg"></canvas>
+    <canvas id="bg"></canvas> 
     <script type="module" src="/src/main.ts"></script>
   </body>
 </html>

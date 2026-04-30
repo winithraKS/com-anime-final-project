@@ -9,6 +9,7 @@ import { extractIndexedVerts } from "./geometry-utils";
 // Scene setup
 // ─────────────────────────────────────────────────────────────────────────────
 
+// MARK: Scene setup
 const scene = new THREE.Scene();
 const camera = new THREE.PerspectiveCamera(
   75,
@@ -98,6 +99,8 @@ scene.add(new THREE.GridHelper(200, 50));
 // Build Three.js morph mesh
 // ─────────────────────────────────────────────────────────────────────────────
 
+const material = new THREE.MeshStandardMaterial({ color: 0xdddddd, flatShading: true });
+
 function buildMorphMesh(
   simpVerts: Float32Array,
   simpFaces: Uint32Array,
@@ -134,7 +137,7 @@ function buildMorphMesh(
 
   const mesh = new THREE.Mesh(
     geo,
-    new THREE.MeshStandardMaterial({ color: 0xdddddd, flatShading: false }),
+    material,
   );
   mesh.morphTargetInfluences = [0];
   return mesh;
@@ -244,7 +247,7 @@ async function applySimplification(ratio: number) {
   setProgress(1);
   setStatus(`
     <div class="status-title qem-color">QEM</div>
-    <div class="status-data">Time: ${(end - start).toFixed(0)}ms · Verts: ${result.vertices.length / 3}</div>
+    <div class="status-data">Time: ${(end - start).toFixed(0)}ms · Verts: ${result.vertices.length / 3} · Faces: ${result.faces.length / 3}</div>
   `);
 }
 
@@ -253,13 +256,27 @@ const ratioDisplay = document.getElementById("ratio-display") as HTMLElement;
 const morphSlider = document.getElementById("morph-slider") as HTMLInputElement;
 const morphDisplay = document.getElementById("morph-display") as HTMLElement;
 const applyBtn = document.getElementById("apply-btn") as HTMLButtonElement;
-const modelSelect = document.getElementById(
-  "model-select",
-) as HTMLSelectElement;
+const morphControls = document.getElementById("morph-controls") as HTMLElement;
+const modelSelect = document.getElementById("model-select") as HTMLSelectElement;
+const toggleShadingBtn = document.getElementById("toggle-shading-btn") as HTMLButtonElement;
+
+toggleShadingBtn.addEventListener("click", () => {
+  // Toggle the boolean
+  material.flatShading = !material.flatShading;
+
+  // CRITICAL: You must set this to true for the shader to re-compile 
+  // with the new shading logic.
+  material.needsUpdate = true;
+
+  // Provide some feedback to the user
+  const mode = material.flatShading ? "Flat" : "Smooth";
+  console.log(`Shading mode changed to: ${mode}`);
+});
 
 ratioSlider.addEventListener("input", () => {
   ratioDisplay.textContent = `${ratioSlider.value}%`;
 });
+
 morphSlider.addEventListener("input", () => {
   morphDisplay.textContent = `${morphSlider.value}%`;
   meshes.forEach((m) => {
@@ -273,7 +290,16 @@ modelSelect.addEventListener("change", async () => {
   await loadModel(modelSelect.value);
   await applySimplification(parseInt(ratioSlider.value) / 100);
   applyBtn.disabled = false;
+  checkMorphUI();
 });
+
+function checkMorphUI() {
+  if (modelSelect.value === "ksHeadNormal.obj") {
+    morphControls.style.display = "block";
+  } else {
+    morphControls.style.display = "none";
+  }
+}
 
 applyBtn.addEventListener("click", async () => {
   applyBtn.disabled = true;
@@ -286,9 +312,10 @@ applyBtn.addEventListener("click", async () => {
   applyBtn.disabled = false;
 });
 
-// Initial load
+// MARK: Initial load
 await loadModel(modelSelect.value);
 await applySimplification(1.0);
+checkMorphUI();
 
 ratioSlider.value = "100";
 ratioDisplay.textContent = "100%";
@@ -304,7 +331,7 @@ fpsDisplay.style.padding = "8px 16px";
 fpsDisplay.style.borderRadius = "8px";
 fpsDisplay.style.border = "1px solid rgba(255, 255, 255, 0.2)";
 fpsDisplay.style.fontFamily = "'JetBrains Mono', monospace";
-fpsDisplay.style.fontSize = "12px";
+fpsDisplay.style.fontSize = "20px";
 fpsDisplay.style.pointerEvents = "none";
 fpsDisplay.style.zIndex = "1000";
 fpsDisplay.style.boxShadow = "0 4px 16px rgba(0,0,0,0.5)";

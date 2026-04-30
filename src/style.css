@@ -1,5 +1,11 @@
 /* ── Reset ── */
-*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+}
 
 body {
   overflow: hidden;
@@ -21,7 +27,7 @@ body {
   position: fixed;
   top: 16px;
   right: 16px;
-  width: 260px;
+  width: 300px;
   background: rgba(20, 20, 24, 0.88);
   backdrop-filter: blur(8px);
   border: 1px solid rgba(255, 255, 255, 0.1);
@@ -54,6 +60,17 @@ body {
   font-weight: 500;
 }
 
+#panel select {
+  background: #2a2a30;
+  color: #fff;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 4px;
+  font-size: 12px;
+  padding: 2px 4px;
+  outline: none;
+  cursor: pointer;
+}
+
 #panel input[type="range"] {
   width: 100%;
   accent-color: #7f77dd;
@@ -66,7 +83,7 @@ body {
   line-height: 1.4;
 }
 
-#apply-btn {
+#panel button {
   margin-top: 2px;
   padding: 8px 12px;
   background: #534ab7;
@@ -78,9 +95,13 @@ body {
   cursor: pointer;
   transition: background 0.15s;
 }
-#apply-btn:hover  { background: #6358c8; }
-#apply-btn:active { background: #3c3489; }
-#apply-btn:disabled {
+#panel button:hover {
+  background: #6358c8;
+}
+#panel button:active {
+  background: #3c3489;
+}
+#panel button:disabled {
   background: #3a3650;
   color: #7a786f;
   cursor: not-allowed;
@@ -90,7 +111,7 @@ body {
 #progress-track {
   width: 100%;
   height: 4px;
-  background: rgba(255,255,255,0.08);
+  background: rgba(255, 255, 255, 0.08);
   border-radius: 2px;
   overflow: hidden;
 }
@@ -103,14 +124,50 @@ body {
 }
 
 #status {
-  font-size: 11px;
-  color: #9c9a92;
-  min-height: 16px;
-  line-height: 1.4;
+  position: fixed;
+  top: 60px;
+  left: 10px;
+  font-size: 14px;
+  color: #ffffff;
+  background: rgba(20, 20, 24, 0.9);
+  backdrop-filter: blur(12px);
+  padding: 12px 20px;
+  border-radius: 10px;
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  z-index: 100;
+  pointer-events: none;
+  font-family: "JetBrains Mono", monospace;
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.5);
+  letter-spacing: 0.5px;
+}
+
+.status-title {
+  font-weight: bold;
+  font-size: 15px;
+  margin-bottom: 2px;
+  text-transform: uppercase;
+  letter-spacing: 1px;
+}
+
+.status-data {
+  font-size: 14px;
+}
+
+.status-divider {
+  border-top: 1px solid rgba(255, 255, 255, 0.1);
+  padding-top: 8px;
+  margin-top: 10px;
+}
+
+.qem-color {
+  color: #ff6b6b;
+}
+.simp-color {
+  color: #51cf66;
 }
 
 hr {
   border: none;
-  border-top: 1px solid rgba(255,255,255,0.08);
+  border-top: 1px solid rgba(255, 255, 255, 0.08);
   margin: 4px 0;
 }

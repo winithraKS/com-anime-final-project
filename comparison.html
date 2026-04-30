@@ -1,0 +1,65 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>SimplifyModifier Test</title>
+    <link rel="stylesheet" href="src/style.css" />
+    <style>
+      .legend {
+        font-size: 12px;
+        margin-bottom: 4px;
+      }
+    </style>
+  </head>
+  <body>
+    <div id="panel">
+      <h2>Simplify Comparison</h2>
+
+      <label>
+        Model
+        <select id="model-select">
+          <option value="flame_base.obj">flame_base.obj</option>
+          <option value="bunny30k.obj" selected>bunny30k.obj</option>
+          <option value="ksHeadNormal.obj">ksHeadNormal.obj</option>
+        </select>
+      </label>
+
+      <hr />
+
+      <div class="legend"><span style="color: #aa4444">■</span> QEM Model</div>
+      <div class="legend">
+        <span style="color: #44aa88">■</span> SimplifyModifier Model
+      </div>
+
+      <hr />
+
+      <button id="toggle-wireframe">Toggle Wireframe</button>
+
+      <label>
+        Ratio
+        <span id="ratio-value" class="value">75%</span>
+      </label>
+      <input
+        type="range"
+        id="simplification-slider"
+        min="1"
+        max="100"
+        value="75"
+      />
+      <button id="apply-btn">Apply Simplification</button>
+      <label>
+        Morph
+        <span id="morph-value" class="value">0%</span>
+      </label>
+      <input type="range" id="morph-slider" min="0" max="100" value="0" />
+
+      <hr />
+      <button onclick="window.location.href = 'index.html'">
+        Switch to FPS benchmark
+      </button>
+    </div>
+    <p id="status">Click Apply to process.</p>
+    <script type="module" src="/src/comparison.ts"></script>
+  </body>
+</html>
